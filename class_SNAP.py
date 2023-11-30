@@ -322,7 +322,7 @@ class SNAP_pre_enodeb(SNAP):
         df_event_enodeb_daily_features = self.rename_features(df_event_enodeb_daily_features, fsm_column_mapping)
         df_event_enodeb_daily_features = self.lower_case_col_names(df_event_enodeb_daily_features)
 
-        features_without_s1u = [e for e in features_list if e != "sip_dc_rate"]
+        features_without_s1u = [e for e in features_list if e not in distinct_column]
         df_event_enodeb_daily_features = self.fill_allday_zero_with_NA(df_event_enodeb_daily_features, features_without_s1u, ["day"] + id_column) 
         return df_event_enodeb_daily_features
         df_event_enodeb_daily_features.repartition(1).write.csv(daily_outputpath.format(date_before_td), header=True, mode="overwrite") 
@@ -367,34 +367,133 @@ class SNAP_pre_enodeb(SNAP):
         return df_agg_features
 
 
+class SNAP_pre_carrier(SNAP_pre_enodeb):
+    def __init__(self,event_enodeb_path, *args, **kwargs): 
+        self.event_enodeb_path = event_enodeb_path
+        super().__init__(*args, **kwargs)
 
+    def preprocess_xlap(self, df, Strings_to_Numericals): 
+        """ 
+        Preprocesses the given DataFrame containing XLAP data. 
+        This function performs the following operations: 
+        1. Converts specified string-type columns to numerical values. 
+        2. Removes duplicates from the DataFrame. 
+        3. pad '0' if only 5 digits the 'ENODEB' column. (12345 to 012345)
+        4. Converts the 'DAY' column from 'MM/dd/yyyy' format to 'yyyy-MM-dd'. 
+        5. Selects the first element of duplicated 'SITE' values and retains unique records. 
+
+        Args: 
+            df (pyspark.sql.DataFrame): Input DataFrame containing XLAP data. 
+            
+        Returns: 
+            pyspark.sql.DataFrame: Processed DataFrame after applying the necessary transformations. 
+        """ 
+        
+        df = df.filter(~(F.col("ENODEB") == "*"))\
+                .filter(F.col("ENODEB").isNotNull())\
+                .withColumn('ENODEB', lpad(col('ENODEB'), 6, '0'))\
+                .withColumn("DAY", F.to_date(F.col("DAY"), "MM/dd/yyyy"))\
+                .withColumn("DAY", F.date_format(F.col("DAY"), "yyyy-MM-dd"))\
+                .select([F.col(column).cast('double') if column in Strings_to_Numericals else F.col(column) for column in df.columns])\
+                .dropDuplicates() 
+        if "RTP_Gap_Duration_Ratio_Avg%" not in df.columns:
+            df = df.withColumn("RTP_Gap_Duration_Ratio_Avg%", lit(0))
+        # during data transmission, we have few duplicate data with different SITE
+        # such as "NEW YORK CITY" and "NEW YORK C", which should be same
+        column_name = df.columns 
+        column_name.remove('SITE') 
+        df = df.groupBy(column_name).agg(first('SITE').alias('SITE')).select(df.columns) 
+    
+        return df
+
+    
+    def get_event_df(self, event_enodeb_path = None, date_str = None):
+
+        if event_enodeb_path is None:
+            event_enodeb_path = self.event_enodeb_path
+        if date_str is None:
+            date_str = self.date_str
+    
+        return spark.read.option("header", "true").csv(event_enodeb_path.format(date_str))
 
 if __name__ == "__main__":
     spark = SparkSession.builder.appName('MonitorEnodebPef_Enodeb_level').config("spark.sql.adapative.enabled","true").enableHiveSupport().getOrCreate()
-    
-    date_str = "2023-11-28"
-
+    date_str = "2023-11-29"
     hdfs_title = 'hdfs://njbbvmaspd11.nss.vzwnet.com:9000/'
-    sourse_path = hdfs_title + "/user/rohitkovvuri/nokia_fsm_kpis_updated_v3/NokiaFSMKPIsSNAP_{}.csv"
-    path_list = ["/user/ZheS/MonitorEnodebPef/enodeb/Event_Enodeb_List_Date/Event_Enodeb_List_{}.csv",
-                "/user/ZheS/MonitorEnodebPef/enodeb//Daily_KPI_14_days_pre_Event/Daily_KPI_14_days_pre_{}.csv",
-                "/user/ZheS/MonitorEnodebPef/enodeb/Event_Enodeb_Pre_Feature_Date/Event_Enodeb_Pre_{}.csv"]
-    path_list = [ hdfs_title + path.format(date_str) for path in path_list]
+    def pre_enodeb(date_str):
+        sourse_path = hdfs_title + "/user/rohitkovvuri/nokia_fsm_kpis_updated_v3/NokiaFSMKPIsSNAP_{}.csv"
+        path_list = ["/user/ZheS/MonitorEnodebPef/enodeb/Event_Enodeb_List_Date/Event_Enodeb_List_{}.csv",
+                    "/user/ZheS/MonitorEnodebPef/enodeb//Daily_KPI_14_days_pre_Event/Daily_KPI_14_days_pre_{}.csv",
+                    "/user/ZheS/MonitorEnodebPef/enodeb/Event_Enodeb_Pre_Feature_Date/Event_Enodeb_Pre_{}.csv"]
+        path_list = [ hdfs_title + path.format(date_str) for path in path_list]
 
-    SnapPreEnodeb = SNAP_pre_enodeb( 
-        date_str=date_str, 
-        id_column=['ENODEB'], 
-        xlap_enodeb_path=sourse_path
-    ) 
+        SnapPreEnodeb = SNAP_pre_enodeb( 
+            date_str=date_str, 
+            id_column=['ENODEB'], 
+            xlap_enodeb_path=sourse_path
+        ) 
 
-    dataframes_list = [ 
-        (SnapPreEnodeb.df_event_enodeb, path_list[0]), 
-        (SnapPreEnodeb.df_event_enodeb_daily_features, path_list[1]), 
-        (SnapPreEnodeb.df_enodeb_stats, path_list[2]) 
-    ] 
+        dataframes_list = [ 
+            (SnapPreEnodeb.df_event_enodeb, path_list[0]), 
+            (SnapPreEnodeb.df_event_enodeb_daily_features, path_list[1]), 
+            (SnapPreEnodeb.df_enodeb_stats, path_list[2]) 
+        ] 
 
-    for df, output_path in dataframes_list: 
-        df.repartition(1).write.csv(output_path, header=True, mode="overwrite") 
+        for df, output_path in dataframes_list: 
+            df.repartition(1).write.csv(output_path, header=True, mode="overwrite") 
+    #pre_enodeb(date_str)
+    def pre_sector(date_str):
+        sector_source = hdfs_title + "/user/rohitkovvuri/fsm_sector_kpis/fsmkpis_snap_sector_{}.csv"
+        event_enodeb_path = hdfs_title+"/user/ZheS/MonitorEnodebPef/enodeb/Event_Enodeb_List_Date/Event_Enodeb_List_{}.csv"
+
+        sector_path_list = ["/user/ZheS/MonitorEnodebPef/Sector//Daily_KPI_14_days_pre_Event/Daily_KPI_14_days_pre_{}.csv",
+                    "/user/ZheS/MonitorEnodebPef/Sector/Event_Enodeb_Pre_Feature_Date/Event_Enodeb_Pre_{}.csv"]
+                    
+        sector_path_list = [ hdfs_title + path.format(date_str) for path in sector_path_list]
+
+        SnapPreSector = SNAP_pre_carrier( 
+            date_str = date_str, 
+            id_column=['ENODEB', "EUTRANCELL"], 
+            xlap_enodeb_path = sector_source,
+            event_enodeb_path = event_enodeb_path    
+        ) 
+
+        dataframes_list = [ 
+            (SnapPreSector.df_event_enodeb_daily_features, sector_path_list[0]), 
+            (SnapPreSector.df_enodeb_stats, sector_path_list[1]) 
+        ] 
+
+        for df, output_path in dataframes_list: 
+            df.repartition(1).write.csv(output_path, header=True, mode="overwrite")
+
+    #pre_sector(date_str)
+
+    def pre_carrier(date_str):
+        carrier_source = hdfs_title + "/user/rohitkovvuri/nokia_fsm_kpis_updated_v5/FSMKPIsSNAP_{}.csv"
+        event_enodeb_path = hdfs_title+"/user/ZheS/MonitorEnodebPef/enodeb/Event_Enodeb_List_Date/Event_Enodeb_List_{}.csv"
+
+        carrier_path_list = ["/user/ZheS/MonitorEnodebPef/Carrier/Daily_KPI_14_days_pre_Event/Daily_KPI_14_days_pre_{}.csv",
+                    "/user/ZheS/MonitorEnodebPef/Carrier/Event_Enodeb_Pre_Feature_Date/Event_Enodeb_Pre_{}.csv"]
+                    
+        carrier_path_list = [ hdfs_title + path.format(date_str) for path in carrier_path_list]
+
+        SnapPreCarrier = SNAP_pre_carrier( 
+            date_str = date_str, 
+            id_column=['ENODEB', "EUTRANCELL","CARRIER"], 
+            xlap_enodeb_path = carrier_source,
+            event_enodeb_path = event_enodeb_path    
+        ) 
+
+        dataframes_list = [ 
+            (SnapPreCarrier.df_event_enodeb_daily_features, carrier_path_list[0]), 
+            (SnapPreCarrier.df_enodeb_stats, carrier_path_list[1]) 
+        ] 
+
+        for df, output_path in dataframes_list: 
+            df.repartition(1).write.csv(output_path, header=True)
+            #df.repartition(1).write.csv(output_path, header=True, mode="overwrite")
+
+    pre_carrier(date_str)
 
     avg_features_list = [f"{feature}_avg" for feature in features_list] 
     std_features_list = [f"{feature}_std" for feature in features_list] 
