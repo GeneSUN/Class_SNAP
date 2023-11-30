@@ -1,5 +1,6 @@
 
 from pyspark.sql.window import Window 
+from pyspark.sql import SparkSession 
 from pyspark.sql import functions as F 
 from pyspark.sql.functions import ( 
     abs, avg, broadcast, col, concat ,concat_ws, countDistinct, exp, expr, explode, first, from_unixtime, 
@@ -111,70 +112,11 @@ class SNAP():
     def __init__(self, 
                  date_str, 
                  id_column, 
-                 xlap_enodeb_path, 
-                 event_enodeb_outputpath, 
-                 daily_outputpath, 
-                 fsm_stats_outputpath) -> None:
+                ) -> None:
         self.date_str = date_str
         self.id_column = id_column
-        self.xlap_enodeb_path = xlap_enodeb_path
-        self.event_enodeb_outputpath = event_enodeb_outputpath
-        self.daily_outputpath = daily_outputpath
-        self.fsm_stats_outputpath = fsm_stats_outputpath
 
-        self.df_xlap_14 = self.read_pre_14_days()
-        self.df_event_enodeb = self.get_event_df()
-        self.df_event_enodeb_daily_features = self.fsm_feature_daily() 
-        self.df_enodeb_stats = self.get_enodeb_stats()
 
-    def get_enodeb_stats(self,df_event_enodeb_daily_features = None, id_column =None):
-        if df_event_enodeb_daily_features is None:
-            df_event_enodeb_daily_features = self.df_event_enodeb_daily_features
-        if id_column is None:
-            id_column = self.id_column
-            # def enodeb_function(df,  features, groupby_feature, aggregate_functions = F.avg): 
-        df_enodeb_std = self.stats_features( df_event_enodeb_daily_features,features_list, id_column, aggregate_functions = F.stddev)
-        df_enodeb_avg = self.stats_features( df_event_enodeb_daily_features,features_list, id_column, aggregate_functions = F.avg)
-
-        df_enodeb_stats = df_enodeb_avg.join(df_enodeb_std, on = id_column, how = "inner")
-        return df_enodeb_stats
-
-    def fsm_feature_daily(self, df_event_enodeb = None, df_xlap_14 =None, date_str =None, id_column = None, \
-                          ):
-
-        if df_event_enodeb is None:
-            df_event_enodeb = self.df_event_enodeb
-        if df_xlap_14 is None:
-            df_xlap_14 = self.df_xlap_14
-        if date_str is None:
-            date_str = self.date_str
-        if id_column is None:
-            id_column = self.id_column
-
-        broadcast_df = broadcast(df_event_enodeb.select('ENODEB',"event_date") ) 
-        df_event_enodeb_daily_features = df_xlap_14.join(broadcast_df, 'ENODEB', "inner")\
-                                                        .filter( col('DAY')!=date_str )\
-                                                        .select(categorical_column + id_column + fsm_s1u_features+ ["event_date"])
-
-        df_event_enodeb_daily_features = self.rename_features(df_event_enodeb_daily_features, fsm_column_mapping)
-        df_event_enodeb_daily_features = self.lower_case_col_names(df_event_enodeb_daily_features)
-
-        features_without_s1u = [e for e in features_list if e != "sip_dc_rate"]
-        df_event_enodeb_daily_features = self.fill_allday_zero_with_NA(df_event_enodeb_daily_features, features_without_s1u, ["day"] + id_column) 
-        return df_event_enodeb_daily_features
-        df_event_enodeb_daily_features.repartition(1).write.csv(daily_outputpath.format(date_before_td), header=True, mode="overwrite") 
-        
-    def read_pre_14_days(self, date_str = None):
-        
-        if date_str is None:
-            date_str = self.date_str
-        date_range = get_date_window(date_str, days = 14, direction = 'backward')[:]
-        df = self.process_csv_files(date_range,  self.xlap_enodeb_path)
-        df = self.union_df_list(df)
-        df = self.preprocess_xlap(df, fsm_sea_features_list)
-        df = df.withColumn("nokia", reduce(add, [col(x) for x in fsm_features]))\
-                .withColumn("samsung", reduce(add, [col(x) for x in sea_features]))
-        return df
     def union_df_list(self, df_list):   
 
         df_post = reduce(lambda df1, df2: df1.union(df2), df_list)
@@ -238,7 +180,70 @@ class SNAP():
         df = df.groupBy(column_name).agg(first('SITE').alias('SITE')).select(df.columns) 
     
         return df
+    def rename_features(self, df, column_mapping): 
 
+        for old_col, new_col in column_mapping.items(): 
+            df = df.withColumnRenamed(old_col, new_col)
+            
+        return df
+
+    def lower_case_col_names(self, df, lower_case_cols_list=None): 
+
+        if lower_case_cols_list is None: 
+            lower_case_cols_list = df.columns 
+
+        for col_name in lower_case_cols_list: 
+            df = df.withColumnRenamed(col_name, col_name.lower()) 
+
+        return df 
+
+    def fill_allday_zero_with_NA(self, df, features_list, groupby_columns):
+        """ 
+        Fill samples with all zero values in specified features with 'None' (NA) for non-enodeb columns.
+        Parameters: 
+            df (DataFrame): Input DataFrame containing the data.
+            features_list (list): List of feature columns to consider for zero value check. 
+            groupby_columns (list, optional): List of columns to group by. Default is ['day', 'enodeb', 'eutrancell'].
+        Returns: 
+            DataFrame: A new DataFrame with samples having all zero values in specified features replaced with 'None'. 
+        """ 
+        # step 1. find samples (enodeb and day) features values are all zero
+        fill_zero_na_df = df.withColumn("FSM_result", reduce(add, [col(x) for x in features_list])).filter(col('FSM_result') == 0 ).select(df.columns)
+        for column in features_list: 
+            if column != "enodeb": 
+                fill_zero_na_df = fill_zero_na_df.withColumn(column, lit(None)) 
+                
+        # step 2. remove null_samples from original dataframe
+        df_without_null = df.join(fill_zero_na_df,groupby_columns, "left_anti").select(df.columns)
+        
+        # step 3. union two dataframe together
+        df_return = df_without_null.union(fill_zero_na_df)
+        
+        return df_return
+
+class SNAP_pre_enodeb(SNAP):
+    
+    def __init__(self,xlap_enodeb_path, *args, **kwargs): 
+        super().__init__(*args, **kwargs)
+        self.xlap_enodeb_path = xlap_enodeb_path
+
+        self.df_xlap_14 = self.read_pre_14_days()
+        self.df_event_enodeb = self.get_event_df()
+        self.df_event_enodeb_daily_features = self.fsm_feature_daily() 
+        self.df_enodeb_stats = self.get_enodeb_stats()
+
+    def read_pre_14_days(self, date_str = None):
+        
+        if date_str is None:
+            date_str = self.date_str
+        date_range = get_date_window(date_str, days = 14, direction = 'backward')[:]
+        df = self.process_csv_files(date_range,  self.xlap_enodeb_path)
+        df = self.union_df_list(df)
+        df = self.preprocess_xlap(df, fsm_sea_features_list)
+        df = df.withColumn("nokia", reduce(add, [col(x) for x in fsm_features]))\
+                .withColumn("samsung", reduce(add, [col(x) for x in sea_features]))
+        return df
+ 
     def get_event_df(self, df = None, date_str = None):
         
         """ 
@@ -297,46 +302,42 @@ class SNAP():
         
         return return_df
 
-    def rename_features(self, df, column_mapping): 
+    def fsm_feature_daily(self, df_event_enodeb = None, df_xlap_14 =None, date_str =None, id_column = None, \
+                          ):
 
-        for old_col, new_col in column_mapping.items(): 
-            df = df.withColumnRenamed(old_col, new_col)
-            
-        return df
+        if df_event_enodeb is None:
+            df_event_enodeb = self.df_event_enodeb
+        if df_xlap_14 is None:
+            df_xlap_14 = self.df_xlap_14
+        if date_str is None:
+            date_str = self.date_str
+        if id_column is None:
+            id_column = self.id_column
 
-    def lower_case_col_names(self, df, lower_case_cols_list=None): 
+        broadcast_df = broadcast(df_event_enodeb.select('ENODEB',"event_date") ) 
+        df_event_enodeb_daily_features = df_xlap_14.join(broadcast_df, 'ENODEB', "inner")\
+                                                        .filter( col('DAY')!=date_str )\
+                                                        .select(categorical_column + id_column + fsm_s1u_features+ ["event_date"])
 
-        if lower_case_cols_list is None: 
-            lower_case_cols_list = df.columns 
+        df_event_enodeb_daily_features = self.rename_features(df_event_enodeb_daily_features, fsm_column_mapping)
+        df_event_enodeb_daily_features = self.lower_case_col_names(df_event_enodeb_daily_features)
 
-        for col_name in lower_case_cols_list: 
-            df = df.withColumnRenamed(col_name, col_name.lower()) 
+        features_without_s1u = [e for e in features_list if e != "sip_dc_rate"]
+        df_event_enodeb_daily_features = self.fill_allday_zero_with_NA(df_event_enodeb_daily_features, features_without_s1u, ["day"] + id_column) 
+        return df_event_enodeb_daily_features
+        df_event_enodeb_daily_features.repartition(1).write.csv(daily_outputpath.format(date_before_td), header=True, mode="overwrite") 
 
-        return df 
+    def get_enodeb_stats(self,df_event_enodeb_daily_features = None, id_column =None):
+        if df_event_enodeb_daily_features is None:
+            df_event_enodeb_daily_features = self.df_event_enodeb_daily_features
+        if id_column is None:
+            id_column = self.id_column
+            # def enodeb_function(df,  features, groupby_feature, aggregate_functions = F.avg): 
+        df_enodeb_std = self.stats_features( df_event_enodeb_daily_features,features_list, id_column, aggregate_functions = F.stddev)
+        df_enodeb_avg = self.stats_features( df_event_enodeb_daily_features,features_list, id_column, aggregate_functions = F.avg)
 
-    def fill_allday_zero_with_NA(self, df, features_list, groupby_columns):
-        """ 
-        Fill samples with all zero values in specified features with 'None' (NA) for non-enodeb columns.
-        Parameters: 
-            df (DataFrame): Input DataFrame containing the data.
-            features_list (list): List of feature columns to consider for zero value check. 
-            groupby_columns (list, optional): List of columns to group by. Default is ['day', 'enodeb', 'eutrancell'].
-        Returns: 
-            DataFrame: A new DataFrame with samples having all zero values in specified features replaced with 'None'. 
-        """ 
-        # step 1. find samples (enodeb and day) features values are all zero
-        fill_zero_na_df = df.withColumn("FSM_result", reduce(add, [col(x) for x in features_list])).filter(col('FSM_result') == 0 ).select(df.columns)
-        for column in features_list: 
-            if column != "enodeb": 
-                fill_zero_na_df = fill_zero_na_df.withColumn(column, lit(None)) 
-                
-        # step 2. remove null_samples from original dataframe
-        df_without_null = df.join(fill_zero_na_df,groupby_columns, "left_anti").select(df.columns)
-        
-        # step 3. union two dataframe together
-        df_return = df_without_null.union(fill_zero_na_df)
-        
-        return df_return
+        df_enodeb_stats = df_enodeb_avg.join(df_enodeb_std, on = id_column, how = "inner")
+        return df_enodeb_stats
 
     def stats_features(self, df,  features, groupby_feature, aggregate_functions ): 
         """ 
@@ -365,11 +366,35 @@ class SNAP():
         
         return df_agg_features
 
-class SNAP_pre_enodeb(SNAP):
+
+
+
+if __name__ == "__main__":
+    spark = SparkSession.builder.appName('MonitorEnodebPef_Enodeb_level').config("spark.sql.adapative.enabled","true").enableHiveSupport().getOrCreate()
     
-    def __init__(self, init_query, *args, **kwargs): 
-        super().__init__(*args, **kwargs)
-        
+    date_str = "2023-11-28"
+
+    hdfs_title = 'hdfs://njbbvmaspd11.nss.vzwnet.com:9000/'
+    sourse_path = hdfs_title + "/user/rohitkovvuri/nokia_fsm_kpis_updated_v3/NokiaFSMKPIsSNAP_{}.csv"
+    path_list = ["/user/ZheS/MonitorEnodebPef/enodeb/Event_Enodeb_List_Date/Event_Enodeb_List_{}.csv",
+                "/user/ZheS/MonitorEnodebPef/enodeb//Daily_KPI_14_days_pre_Event/Daily_KPI_14_days_pre_{}.csv",
+                "/user/ZheS/MonitorEnodebPef/enodeb/Event_Enodeb_Pre_Feature_Date/Event_Enodeb_Pre_{}.csv"]
+    path_list = [ hdfs_title + path.format(date_str) for path in path_list]
+
+    SnapPreEnodeb = SNAP_pre_enodeb( 
+        date_str=date_str, 
+        id_column=['ENODEB'], 
+        xlap_enodeb_path=sourse_path
+    ) 
+
+    dataframes_list = [ 
+        (SnapPreEnodeb.df_event_enodeb, path_list[0]), 
+        (SnapPreEnodeb.df_event_enodeb_daily_features, path_list[1]), 
+        (SnapPreEnodeb.df_enodeb_stats, path_list[2]) 
+    ] 
+
+    for df, output_path in dataframes_list: 
+        df.repartition(1).write.csv(output_path, header=True, mode="overwrite") 
 
     avg_features_list = [f"{feature}_avg" for feature in features_list] 
     std_features_list = [f"{feature}_std" for feature in features_list] 
