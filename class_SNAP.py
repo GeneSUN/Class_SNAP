@@ -6,6 +6,7 @@ from pyspark.sql.functions import (
     abs, avg, broadcast, col, concat ,concat_ws, countDistinct, exp, expr, explode, first, from_unixtime, 
     lpad, length, lit, max, min, rand, regexp_replace, round, sum, to_date, udf, when, 
 ) 
+from pyspark.sql.types import (DateType, DoubleType, StringType, StructType, StructField) 
 from datetime import datetime, timedelta, date 
 import argparse 
 import numpy as np 
@@ -16,8 +17,10 @@ from operator import add
 import concurrent
 from functools import reduce 
 from operator import add 
+from math import radians, cos, sin, asin, sqrt
+import concurrent.futures 
 
-def get_date_window(start_date, end_time = None,  days = 1, direction = "forward", formation ="str"): 
+def get_date_window(start_date, days = 1, direction = "backward", formation ="str", end_time = None ): 
     from datetime import datetime, timedelta, date
     # Calculate the end date and start_date--------------------------------------
     
@@ -221,6 +224,18 @@ class SNAP():
         
         return df_return
 
+    def round_numeric_columns(self, df, decimal_places=2, numeric_columns = None): 
+
+        if numeric_columns == None:
+            numeric_columns = [col_name for col_name, data_type in df.dtypes if data_type == "double" or data_type == "float"]
+
+        # Apply rounding to all numeric columns 
+        for col_name in numeric_columns: 
+            df = df.withColumn(col_name, round(df[col_name], decimal_places)) 
+            
+        return df
+
+
 class SNAP_pre_enodeb(SNAP):
     
     def __init__(self,xlap_enodeb_path, *args, **kwargs): 
@@ -413,13 +428,357 @@ class SNAP_pre_carrier(SNAP_pre_enodeb):
             event_enodeb_path = self.event_enodeb_path
         if date_str is None:
             date_str = self.date_str
+        try:
+            df = spark.read.option("header", "true").csv(event_enodeb_path.format(date_str))
+        except Exception as e:
+            if datetime.strptime(date_str, "%Y-%m-%d").weekday() < 5 or date_str in ["2023-11-27","2023-11-24", "2023-11-23", "2023-12-25"] :
+                pass
+            else:    
+                print(e, f"missing event enodeb list at {date_str}")
+        return df
+
+
+class SNAP_post(SNAP):
+    global oracle_file, avg_features_list, std_features_list, change_rate_features_list, \
+    threshold_std_features_list, threshold_avg_features_list, threshold_max_features_list, alert_features_list
+
+    oracle_file = "hdfs://njbbepapa1.nss.vzwnet.com:9000/fwa/atoll_oracle_daily/date=2023-10-08"
+    avg_features_list = [f"{feature}_avg" for feature in features_list] 
+    std_features_list = [f"{feature}_std" for feature in features_list] 
+    change_rate_features_list = [f"{feature}_change_rate" for feature in features_list] 
+    threshold_std_features_list = [f"{feature}_threshold_std" for feature in features_list] 
+    threshold_avg_features_list = [f"{feature}_threshold_avg" for feature in features_list] 
+    threshold_max_features_list = [f"{feature}_threshold_max" for feature in features_list] 
+    alert_features_list = [f"{feature}_alert" for feature in features_list] 
+
+    def __init__(self,xlap_enodeb_path, Enodeb_Pre_Feature_path, enodeb_date, enodeb_path,*args, **kwargs): 
+        super().__init__(*args, **kwargs)
+        self.xlap_enodeb_path = xlap_enodeb_path
+        self.Enodeb_Pre_Feature_path = Enodeb_Pre_Feature_path
+        self.enodeb_date = enodeb_date
+        self.enodeb_path = enodeb_path
+
+        self.df_xlap = self.preprocess_xlap( spark.read.option("header", "true")
+                                            .csv(self.xlap_enodeb_path.format(self.date_str) ), fsm_sea_features_list)
+        self.df_enodeb = spark.read.option("header", "true").csv(self.enodeb_path.format(self.enodeb_date))
+        self.df_xlap_pre_stas = spark.read.option("header", "true")\
+                                        .csv( self.Enodeb_Pre_Feature_path.format(self.enodeb_date) )
+        self.df_pre_post = self.get_post_feature()
+
+        self.df_enb_cord = self.get_enb_cord()
+        self.df_enb_tickets_nrb = self.get_enodeb_tickets_nrb()
+        self.df_w360_tickets = self.get_enodeb_tickets_w360()
+
+        self.result_df = self.patch1( self.join_df() )
+
+    def patch1(self, result_df, enodeb_date = None):
+        if enodeb_date is None:
+            enodeb_date = self.enodeb_date
+        # patch: for data with all features as zero, change its has_abnormal_kpi to 0.
+        all_zero_condition = reduce(lambda x, y: x & (col(y) == 0), features_list, lit(True)) 
+        result_df = result_df.withColumn("has_abnormal_kpi", when(all_zero_condition, 0).otherwise(col("has_abnormal_kpi")))\
+                            .withColumn("event_day", lit(enodeb_date) )
+          
+
+        return result_df
+
+    def join_df(self, df_enb_cord = None, df_pre_post = None, df_enb_tickets_nrb = None, df_w360_tickets = None):
+        if df_enb_cord is None:
+            df_enb_cord = self.df_enb_cord
+        if df_pre_post is None:
+            df_pre_post = self.df_pre_post
+        if df_enb_tickets_nrb is None:
+            df_enb_tickets_nrb = self.df_enb_tickets_nrb
+        if df_w360_tickets is None:
+            df_w360_tickets = self.df_w360_tickets
+        joined_df = ( 
+            df_enb_cord 
+            .join(broadcast(df_pre_post), 'ENODEB', 'right') 
+            .join(broadcast(df_enb_tickets_nrb), 'ENODEB', 'left') 
+            .join(broadcast(df_w360_tickets), 'ENODEB', 'left') 
+        )
+        joined_df = self.round_numeric_columns(joined_df,decimal_places=4)
+        joined_df = self.lower_case_col_names( joined_df)
+        return joined_df
     
-        return spark.read.option("header", "true").csv(event_enodeb_path.format(date_str))
+    def get_post_feature(self,  df_enodeb = None, df_xlap = None, id_column = None, df_xlap_pre_stas = None):
+        # get post feature for enodeb maintained 14 days ahead
+        if df_enodeb is None:
+            df_enodeb = self.df_enodeb
+        if df_xlap is None:
+            df_xlap = self.df_xlap
+        if id_column is None:
+            id_column = self.id_column
+        if df_xlap_pre_stas is None:
+            df_xlap_pre_stas = self.df_xlap_pre_stas
+
+        df_post = df_xlap.join( df_enodeb.select("enodeb"), "enodeb" )\
+                                .select(categorical_column + id_column + sea_s1u_features)
+        
+        df_post = self.fill_allday_zero_with_NA(df_post, sea_features, id_column)
+        df_post = self.rename_features(df_post, sea_column_mapping)
+        
+        
+
+        df_pre_post = self.calculate_metrics(df_post, df_xlap_pre_stas, id_column)
+
+        exclude_columns =  threshold_avg_features_list + threshold_std_features_list + threshold_max_features_list
+        selected_columns = [column for column in df_pre_post.columns if column not in exclude_columns]
+        df_pre_post = self.round_numeric_columns( df_pre_post.select(selected_columns) )
+    
+        return df_pre_post
+
+    def get_enb_cord(self):
+        df_enb_cord = spark.read.format("com.databricks.spark.csv").option("header", "True").load(oracle_file)\
+                            .filter(F.col("LATITUDE_DEGREES_NAD83").isNotNull())\
+                            .filter(F.col("LONGITUDE_DEGREES_NAD83").isNotNull())\
+                            .filter(F.col("ENODEB_ID").isNotNull())\
+                            .groupby("ENODEB_ID","LATITUDE_DEGREES_NAD83","LONGITUDE_DEGREES_NAD83")\
+                            .count()\
+                            .select( col('ENODEB_ID').alias('ENODEB'), 
+                                    F.col('LATITUDE_DEGREES_NAD83').cast("double").alias('LATITUDE'), 
+                                    F.col('LONGITUDE_DEGREES_NAD83').cast("double").alias('LONGITUDE'))\
+                            .withColumn('ENODEB', lpad(col('ENODEB'), 6, '0'))\
+                            .dropDuplicates( ['ENODEB'] )
+        return df_enb_cord
+
+    def calculate_metrics(self, df_post_feature_event_j, df_xlap_pre_stas, groupby_features):
+        
+        df_pre_post = df_xlap_pre_stas.join(df_post_feature_event_j, on = groupby_features, how = 'inner' )
+        
+        for feature in features_list_inc: 
+            avg_feature = f"{feature}_avg"
+            std_feature = f"{feature}_std"
+            change_rate_column_name = f"{feature}_change_rate" 
+            df_pre_post = df_pre_post.withColumn(change_rate_column_name, ( col(avg_feature) - col(feature) ) / col(avg_feature)) 
+            df_pre_post = df_pre_post.withColumn(change_rate_column_name, when(col(change_rate_column_name) < -1, -1).otherwise(col(change_rate_column_name))) 
+            
+            threshold_avg = f"{feature}_threshold_avg" 
+            df_pre_post = df_pre_post.withColumn(threshold_avg, (col(avg_feature) + 0.1*col(avg_feature)) ) 
+        
+            threshold_std = f"{feature}_threshold_std" 
+            df_pre_post = df_pre_post.withColumn(threshold_std, (col(avg_feature) + 2*col(std_feature)) )
+            
+            threshold_max = f"{feature}_threshold_max"
+            df_pre_post = df_pre_post.withColumn(threshold_max, when(col(threshold_std) > col(threshold_avg), col(threshold_std)).otherwise(col(threshold_avg)))
+            
+            alert_feature = f"{feature}_alert"
+            df_pre_post = df_pre_post.withColumn(alert_feature, when( col(threshold_max) < col(feature), 1).otherwise(0) )
+
+        for feature in features_list_dec: 
+            avg_feature = f"{feature}_avg"
+            std_feature = f"{feature}_std"
+            change_rate_column_name = f"{feature}_change_rate" 
+            df_pre_post = df_pre_post.withColumn(change_rate_column_name, (col(feature) - col(avg_feature)) / col(avg_feature)) 
+            df_pre_post = df_pre_post.withColumn(change_rate_column_name, when(col(change_rate_column_name) > 1, 1).otherwise(col(change_rate_column_name))) 
+            
+            threshold_avg = f"{feature}_threshold_avg" 
+            df_pre_post = df_pre_post.withColumn(threshold_avg, (col(avg_feature) - 0.1*col(avg_feature)) ) 
+        
+            threshold_std = f"{feature}_threshold_std" 
+            df_pre_post = df_pre_post.withColumn(threshold_std, (col(avg_feature) - 2*col(std_feature)) )
+            
+            threshold_max = f"{feature}_threshold_max"
+            df_pre_post = df_pre_post.withColumn(threshold_max, when(col(threshold_std) < col(threshold_avg), col(threshold_std)).otherwise(col(threshold_avg)))
+            
+            alert_feature = f"{feature}_alert"
+            df_pre_post = df_pre_post.withColumn(alert_feature, when( col(threshold_max) > col(feature), 1).otherwise(0) )
+
+    #--------------------------------------------------------------------------------------------
+        df_pre_post = df_pre_post.withColumn("avgconnected_users_alert", lit(0))
+    #--------------------------------------------------------------------------------------------    
+        alert_list = [f"{feature}_alert" for feature in features_list]
+        
+        df_pre_post = df_pre_post.withColumn("abnormal_kpi", reduce(add, [col(x) for x in alert_list])  )
+        df_pre_post = df_pre_post.withColumn('has_abnormal_kpi', when(df_pre_post['abnormal_kpi'] > 0, 1).otherwise(0))
+
+        return df_pre_post
+      
+    def get_enodeb_tickets_nrb(self, df_enb_list = None, date_str = None, enodeb_date = None, df_enb_cord = None):
+        
+        if df_enb_list is None:
+            df_enb_list = self.df_enodeb
+        if date_str is None:
+            date_str = self.date_str
+        if enodeb_date is None:
+            enodeb_date = self.enodeb_date
+        if df_enb_cord is None:
+            df_enb_cord = self.df_enb_cord
+
+        def haversine(lat2,lon2, lat1, lon1):
+            if lat2 is not None and lat1 is not None and lon1 is not None and lon2 is not None :
+                """
+                Calculate the great circle distance in kilometers between two points 
+                on the earth (specified in decimal degrees)
+                """
+                # meter per sce to mph
+                # convert decimal degrees to radians 
+                lon1, lat1, lon2, lat2 = map(radians, [lon1, lat1, lon2, lat2])
+            
+                # haversine formula 
+                dlon = lon2 - lon1 
+                dlat = lat2 - lat1 
+                a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
+                c = 2 * asin(sqrt(a)) 
+                r = 6371.7 # Radius of earth in kilometers. Use 3956 for miles. Determines return value units.
+                return c * r
+            else:
+                return 1000.0
+        get_haversine_udf = F.udf(haversine, DoubleType()) 
+        
+        df_enb_list = df_enb_list.withColumn('event_date_final',lit(enodeb_date) )\
+                                        .withColumnRenamed("ENODEB","enodeb_event")
+        
+        window_recentTickets=Window().partitionBy("trouble_id","status").orderBy(F.desc("MODIFIED_DATE"),F.desc("create_date_nrb"),F.desc("NRB_ASSIGNED_DATE"),F.desc("lat"),F.desc("lng"))
+        window_dist=Window().partitionBy("trouble_id","status").orderBy("distance_from_enb")
+        
+        tickets_path='hdfs://njbbepapa1.nss.vzwnet.com:9000/user/kovvuve/epa_tickets/epa_tickets_{}-*.csv.gz'
+
+        df_tickets = spark.read.option("header","true").option("delimiter", "|}{|")\
+                                .csv(tickets_path.format(date_str))\
+                            .dropDuplicates()\
+                            .filter(F.col("lat").isNotNull())\
+                            .filter(F.col("lng").isNotNull())\
+                            .filter( F.col("copy_group_assigned") == "NRB" )\
+                            .withColumnRenamed("COPY_OF_STATUS", "status")\
+                            .withColumn("unix_date_mdified",
+                                        F.from_unixtime("modified_unix_time",
+                                        "MM-dd-yyyy"))\
+                            .select( 'trouble_id', 'status', 
+                                    F.to_date('NRB_ASSIGNED_DATE').alias("NRB_ASSIGNED_DATE"), 
+                                    F.to_date('create_date').alias("create_date_nrb"), 
+                                    F.to_date('MODIFIED_DATE').alias("MODIFIED_DATE"), 'lat', 'lng')\
+                            .dropDuplicates()\
+                            .withColumn("recent_tickets_row",F.row_number().over(window_recentTickets))\
+                            .filter(F.col("recent_tickets_row")==1)\
+                            .withColumn("id_lat",F.col("lat").cast("double"))\
+                            .withColumn("id_lng",F.col("lng").cast("double"))\
+                            .withColumn("id_lat",(F.col("lat")*F.lit(1.0)).cast("int"))\
+                            .withColumn("id_lng",(F.col("lng")*F.lit(1.0)).cast("int"))\
+                            .select("trouble_id","status","create_date_nrb",
+                                        F.col("lat").cast("double"),
+                                        F.col("lng").cast("double"))
+                                    
+        df_tickets_agg =  df_tickets.groupby("trouble_id","status","create_date_nrb","lat","lng").count()
+        df_tickets_agg.cache()
+        df_tickets_agg.count()
+        
+        df_tickets_open =df_tickets_agg.filter(F.lower(F.col("status"))=="open")
+        df_tickets_notopen =df_tickets_agg.filter(~(F.lower(F.col("status"))=="open"))
+        
+        df_tickets_2 = df_tickets_open.join(df_tickets_notopen,
+                                            df_tickets_notopen.trouble_id == df_tickets_open.trouble_id,
+                                            "left_anti")\
+                                    .select(df_tickets_open['*'])\
+                                    .filter(F.col("lat").isNotNull() & F.col("lng").isNotNull())
+        df_enb_comb =df_enb_cord.join(broadcast(df_enb_list),
+                                        F.lpad(df_enb_list.enodeb_event,6,'0') ==F.lpad(df_enb_cord.ENODEB,6,'0'),"right")
+        df_enb_comb = df_tickets_2.crossJoin(broadcast(df_enb_comb))\
+                                .withColumn("includeTicket",
+                                            F.when(F.col("create_date_nrb")>=F.to_date("event_date_final"),
+                                            F.lit("Y")).otherwise(F.lit("N")))\
+                                .filter(F.col("includeTicket")=="Y")
+        #--------------------------------------------------------------------------------------------------
+        # cross this logic once again..
+        df_enb_comb_dist = df_enb_comb\
+                            .withColumn("distance_from_enb",
+                                        get_haversine_udf(df_enb_comb.LATITUDE,
+                                                            df_enb_comb.LONGITUDE,df_enb_comb.lat,
+                                                            df_enb_comb.lng).cast("double")/F.lit(1.60934))\
+                            .filter(F.col("distance_from_enb")<=5.0)\
+                            .withColumn("trouble_id_row",F.row_number().over(window_dist))\
+                            .filter(F.col("trouble_id_row")==1)\
+                            .filter(F.lower(F.col("status"))=="open")\
+                            .withColumn("po_box_address",F.lit(0))\
+                            .withColumn("ticket_source",F.lit("nrb"))\
+                            .select("enodeb_event",
+                                    F.col("LATITUDE").alias("enb_lat"),
+                                    F.col("LONGITUDE").alias('enb_lng'),
+                                    "trouble_id","event_date_final",
+                                    F.col("create_date_nrb").alias("create_date"),
+                                    "po_box_address","ticket_source")\
+                            .sort("enodeb_event","event_date_final","create_date")
+                            
+        df_enb_tickets = df_enb_comb_dist.groupby("enodeb_event")\
+                                        .agg(F.count("trouble_id").alias('nrb_ticket_counts'))\
+                                        .select(F.col('enodeb_event').alias("ENODEB"), 
+                                                F.col('nrb_ticket_counts') )
+                                        
+
+        return df_enb_tickets
+    
+    def get_enodeb_tickets_w360(self, df_enb_list = None, date_start = None, enodeb_date=None):
+        if df_enb_list is None:
+            df_enb_list = self.df_enodeb
+        if date_start is None:
+            date_start = self.date_str
+        if enodeb_date is None:
+            enodeb_date = self.enodeb_date
+        
+        date1 = datetime.strptime(date_start, "%Y-%m-%d") 
+        date2 = datetime.strptime(enodeb_date, "%Y-%m-%d") 
+        daysBack = (date1 - date2).days + 1
+
+        df_enb_list = df_enb_list.withColumn('event_date_final',lit(enodeb_date) )\
+                                .withColumnRenamed("ENODEB","enodeb_event")\
+                                .groupby("enodeb_event")\
+                                .agg(F.first("event_date_final").alias("event_date_final"))
+                                
+        window_recentTickets=Window().partitionBy('NOC_TT_ID', 'status')\
+                                    .orderBy(F.desc("event_start_date"),
+                                            F.desc("event_end_date"),
+                                            F.desc("lat_enb"),
+                                            F.desc("lng_enb"))
+        
+        df_kpis_w360 = spark.read.option("header","true")\
+                        .csv("hdfs://njbbepapa1.nss.vzwnet.com:9000//fwa/workorder_oracle/DT={}".format(date_start))\
+                        .dropDuplicates().withColumn("data_date",F.lit(date_start))
+
+        for idate in range(1,daysBack):
+            date_val = get_date_window(date_start,idate)[-1]
+            
+            try:
+                df_temp_kpi = spark.read.option("header","true")\
+                                .csv("hdfs://njbbepapa1.nss.vzwnet.com:9000//fwa/workorder_oracle/DT={}".format(date_val))\
+                                .dropDuplicates()\
+                                .withColumn("data_date",F.lit(date_val))
+                df_kpis_w360 = df_kpis_w360.union(df_temp_kpi.select(df_kpis_w360.columns))
+                
+            except:
+                print("data missing for {}".format(date_val))
+                
+        df_tickets_w360 =  df_kpis_w360.withColumnRenamed("STATUS", "status")\
+                        .withColumn("event_start_date",F.to_date(F.substring(F.col("EVENT_START_DATE"),1,10)))\
+                        .withColumn("event_end_date",F.to_date(F.substring(F.col("EVENT_END_DATE"),1,10)))\
+                        .withColumn("CELL_ID",F.col("CELL__"))\
+                        .withColumn("enb_id_w360",F.when(F.length("CELL_ID")>8,F.expr("substring(CELL_ID,1,length(CELL_ID)-4)") ).otherwise(F.col("CELL_ID")) )\
+                        .filter(F.col("CELL_ID").isNotNull())\
+                        .filter(F.lower(F.col("status")).isin("open"))\
+                        .select( 'NOC_TT_ID', 'status',"enb_id_w360","CELL_ID","event_start_date","event_end_date", F.col('LAT').alias("lat_enb"), F.col('LONG_X').alias("lng_enb"))\
+                        .dropDuplicates()\
+                        .withColumn("recent_tickets_row",F.row_number().over(window_recentTickets))\
+                        .filter(F.col("recent_tickets_row")==1)\
+                        .select('NOC_TT_ID', 'status',"enb_id_w360","CELL_ID","event_start_date","event_end_date",F.col("lat_enb").cast("double"),F.col("lng_enb").cast("double"))
+        
+        df_tickets_agg =  df_tickets_w360.groupby('NOC_TT_ID', 'status',"enb_id_w360","event_start_date","event_end_date","lat_enb","lng_enb").count()
+        
+        df_w360 = df_enb_list.join(df_tickets_agg,F.lpad(df_enb_list.enodeb_event,6,'0') ==F.lpad(df_tickets_agg.enb_id_w360,6,'0'))\
+                                .withColumn("includeTicket",F.when(F.col("event_start_date")>=F.to_date("event_date_final"),F.lit("Y")).otherwise(F.lit("N"))).filter(F.col("includeTicket")=="Y")\
+                                .withColumn("ticket_source",F.lit("w360"))\
+                                .select("enodeb_event",F.col("lat_enb").alias("enb_lat"),F.col("lng_enb").alias('enb_lng'),F.col("NOC_TT_ID").alias("trouble_id"),"event_date_final",F.col("event_start_date").alias("create_date"),"ticket_source")\
+                                .sort("enodeb_event","event_date_final","create_date")
+        df_w360_tickets = df_w360.groupby("enodeb_event")\
+                                .agg(F.count("ticket_source").alias('w360_ticket_counts'))\
+                                .select(F.col('enodeb_event').alias("ENODEB"),F.col('w360_ticket_counts') )
+        return df_w360_tickets
 
 if __name__ == "__main__":
     spark = SparkSession.builder.appName('MonitorEnodebPef_Enodeb_level').config("spark.sql.adapative.enabled","true").enableHiveSupport().getOrCreate()
+    parser = argparse.ArgumentParser(description="Inputs for generating Post SNA Maintenance Script Trial")
+
     date_str = "2023-11-29"
     hdfs_title = 'hdfs://njbbvmaspd11.nss.vzwnet.com:9000/'
+
     def pre_enodeb(date_str):
         sourse_path = hdfs_title + "/user/rohitkovvuri/nokia_fsm_kpis_updated_v3/NokiaFSMKPIsSNAP_{}.csv"
         path_list = ["/user/ZheS/MonitorEnodebPef/enodeb/Event_Enodeb_List_Date/Event_Enodeb_List_{}.csv",
@@ -465,7 +824,6 @@ if __name__ == "__main__":
 
         for df, output_path in dataframes_list: 
             df.repartition(1).write.csv(output_path, header=True, mode="overwrite")
-
     #pre_sector(date_str)
 
     def pre_carrier(date_str):
@@ -492,13 +850,75 @@ if __name__ == "__main__":
         for df, output_path in dataframes_list: 
             df.repartition(1).write.csv(output_path, header=True)
             #df.repartition(1).write.csv(output_path, header=True, mode="overwrite")
+    #pre_carrier(date_str)
 
-    pre_carrier(date_str)
 
-    avg_features_list = [f"{feature}_avg" for feature in features_list] 
-    std_features_list = [f"{feature}_std" for feature in features_list] 
-    change_rate_features_list = [f"{feature}_change_rate" for feature in features_list] 
-    threshold_std_features_list = [f"{feature}_threshold_std" for feature in features_list] 
-    threshold_avg_features_list = [f"{feature}_threshold_avg" for feature in features_list] 
-    threshold_max_features_list = [f"{feature}_threshold_max" for feature in features_list] 
-    alert_features_list = [f"{feature}_alert" for feature in features_list] 
+
+    date_range = [ (date.today() - timedelta(days= i) ).strftime("%Y-%m-%d") for i in range(1,35) ]
+    """
+    with concurrent.futures.ThreadPoolExecutor() as executor: 
+        list(executor.map(pre_enodeb, date_range)) 
+    
+    with concurrent.futures.ThreadPoolExecutor() as executor: 
+        list(executor.map(pre_sector, date_range)) 
+
+    with concurrent.futures.ThreadPoolExecutor() as executor: 
+        list(executor.map(pre_carrier, date_range))    
+    """
+    
+
+    def enodeb_post(date_str,enodeb_date): 
+        xlap_enodeb_path = hdfs_title + '/user/rohitkovvuri/nokia_fsm_kpis_updated_v3/NokiaFSMKPIsSNAP_{}.csv'
+        Enodeb_Pre_Feature_path = hdfs_title + "/user/ZheS/MonitorEnodebPef/enodeb/Event_Enodeb_Pre_Feature_Date/Event_Enodeb_Pre_{}.csv"
+        enodeb_path = hdfs_title + "/user/ZheS/MonitorEnodebPef/enodeb/Event_Enodeb_List_Date/Event_Enodeb_List_{}.csv"
+        snap_post_instance = SNAP_post(date_str = date_str,   
+                                    id_column = ['ENODEB'],   
+                                    xlap_enodeb_path = xlap_enodeb_path,  
+                                    Enodeb_Pre_Feature_path = Enodeb_Pre_Feature_path,  
+                                    enodeb_date = enodeb_date,  
+                                    enodeb_path = enodeb_path) 
+
+        output_path = f"{hdfs_title}/user/ZheS/MonitorEnodebPef/enodeb/Event_Enodeb_Post_tickets_Feature_Date/{date_str}_tickets_Post_Feature_of_Enodeb/{date_str}_tickets_Post_feature_maintained_{enodeb_date}.csv" 
+
+        snap_post_instance.result_df.repartition(1).write.csv(output_path, header=True, mode="overwrite") 
+
+
+
+
+    
+    def one_day_enodeb_post(date_str):
+
+        previous_14_days = [(datetime.strptime(date_str, "%Y-%m-%d") - timedelta(days=day)).strftime("%Y-%m-%d") for day in range(14)]  
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor: 
+
+            executor.map(lambda enodeb_date: enodeb_post( date_str, enodeb_date), previous_14_days) 
+
+
+    loop_days = [(datetime.strptime(date_str, "%Y-%m-%d") - timedelta(days=day)).strftime("%Y-%m-%d") 
+                        for day in range(20)]  
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=100) as executor: 
+        executor.map(one_day_enodeb_post, loop_days) 
+
+"""
+    def enodeb_post(date_str,enodeb_date): 
+        xlap_enodeb_path = hdfs_title + '/user/rohitkovvuri/nokia_fsm_kpis_updated_v3/NokiaFSMKPIsSNAP_{}.csv'
+        Enodeb_Pre_Feature_path = hdfs_title + "/user/ZheS/MonitorEnodebPef/enodeb/Event_Enodeb_Pre_Feature_Date/Event_Enodeb_Pre_{}.csv"
+        enodeb_path = hdfs_title + "/user/ZheS/MonitorEnodebPef/enodeb/Event_Enodeb_List_Date/Event_Enodeb_List_{}.csv"
+        snap_post_instance = SNAP_post(date_str = date_str,   
+                                    id_column = ['ENODEB'],   
+                                    xlap_enodeb_path = xlap_enodeb_path,  
+                                    Enodeb_Pre_Feature_path = Enodeb_Pre_Feature_path,  
+                                    enodeb_date = enodeb_date,  
+                                    enodeb_path = enodeb_path) 
+
+        output_path = f"{hdfs_title}/user/ZheS/MonitorEnodebPef/enodeb/Event_Enodeb_Post_tickets_Feature_Date/{date_str}_tickets_Post_Feature_of_Enodeb/{date_str}_tickets_Post_feature_maintained_{enodeb_date}.csv" 
+
+        snap_post_instance.result_df.repartition(1).write.csv(output_path, header=True, mode="overwrite") 
+
+    # Generate dates for the 14 days prior to a given date  
+    previous_14_days = [(datetime.strptime(date_str, "%Y-%m-%d") - timedelta(days=day)).strftime("%Y-%m-%d") for day in range(14)]  
+    with concurrent.futures.ThreadPoolExecutor(max_workers=100) as executor: 
+
+        executor.map(lambda enodeb_date: enodeb_post( date_str, enodeb_date), previous_14_days) 
+"""
