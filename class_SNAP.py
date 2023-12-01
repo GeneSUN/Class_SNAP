@@ -175,7 +175,8 @@ class SNAP():
                 .withColumn("DAY", F.date_format(F.col("DAY"), "yyyy-MM-dd"))\
                 .select([F.col(column).cast('double') if column in Strings_to_Numericals else F.col(column) for column in df.columns])\
                 .dropDuplicates() 
-    
+        if "RTP_Gap_Duration_Ratio_Avg%" not in df.columns:
+            df = df.withColumn("RTP_Gap_Duration_Ratio_Avg%", lit(0))
         # during data transmission, we have few duplicate data with different SITE
         # such as "NEW YORK CITY" and "NEW YORK C", which should be same
         column_name = df.columns 
@@ -234,7 +235,6 @@ class SNAP():
             df = df.withColumn(col_name, round(df[col_name], decimal_places)) 
             
         return df
-
 
 class SNAP_pre_enodeb(SNAP):
     
@@ -437,7 +437,6 @@ class SNAP_pre_carrier(SNAP_pre_enodeb):
                 print(e, f"missing event enodeb list at {date_str}")
         return df
 
-
 class SNAP_post(SNAP):
     global oracle_file, avg_features_list, std_features_list, change_rate_features_list, \
     threshold_std_features_list, threshold_avg_features_list, threshold_max_features_list, alert_features_list
@@ -464,12 +463,7 @@ class SNAP_post(SNAP):
         self.df_xlap_pre_stas = spark.read.option("header", "true")\
                                         .csv( self.Enodeb_Pre_Feature_path.format(self.enodeb_date) )
         self.df_pre_post = self.get_post_feature()
-
         self.df_enb_cord = self.get_enb_cord()
-        self.df_enb_tickets_nrb = self.get_enodeb_tickets_nrb()
-        self.df_w360_tickets = self.get_enodeb_tickets_w360()
-
-        self.result_df = self.patch1( self.join_df() )
 
     def patch1(self, result_df, enodeb_date = None):
         if enodeb_date is None:
@@ -478,29 +472,22 @@ class SNAP_post(SNAP):
         all_zero_condition = reduce(lambda x, y: x & (col(y) == 0), features_list, lit(True)) 
         result_df = result_df.withColumn("has_abnormal_kpi", when(all_zero_condition, 0).otherwise(col("has_abnormal_kpi")))\
                             .withColumn("event_day", lit(enodeb_date) )
-          
 
         return result_df
+    def get_enb_cord(self):
+        df_enb_cord = spark.read.format("com.databricks.spark.csv").option("header", "True").load(oracle_file)\
+                            .filter(F.col("LATITUDE_DEGREES_NAD83").isNotNull())\
+                            .filter(F.col("LONGITUDE_DEGREES_NAD83").isNotNull())\
+                            .filter(F.col("ENODEB_ID").isNotNull())\
+                            .groupby("ENODEB_ID","LATITUDE_DEGREES_NAD83","LONGITUDE_DEGREES_NAD83")\
+                            .count()\
+                            .select( col('ENODEB_ID').alias('ENODEB'), 
+                                    F.col('LATITUDE_DEGREES_NAD83').cast("double").alias('LATITUDE'), 
+                                    F.col('LONGITUDE_DEGREES_NAD83').cast("double").alias('LONGITUDE'))\
+                            .withColumn('ENODEB', lpad(col('ENODEB'), 6, '0'))\
+                            .dropDuplicates( ['ENODEB'] )
+        return df_enb_cord
 
-    def join_df(self, df_enb_cord = None, df_pre_post = None, df_enb_tickets_nrb = None, df_w360_tickets = None):
-        if df_enb_cord is None:
-            df_enb_cord = self.df_enb_cord
-        if df_pre_post is None:
-            df_pre_post = self.df_pre_post
-        if df_enb_tickets_nrb is None:
-            df_enb_tickets_nrb = self.df_enb_tickets_nrb
-        if df_w360_tickets is None:
-            df_w360_tickets = self.df_w360_tickets
-        joined_df = ( 
-            df_enb_cord 
-            .join(broadcast(df_pre_post), 'ENODEB', 'right') 
-            .join(broadcast(df_enb_tickets_nrb), 'ENODEB', 'left') 
-            .join(broadcast(df_w360_tickets), 'ENODEB', 'left') 
-        )
-        joined_df = self.round_numeric_columns(joined_df,decimal_places=4)
-        joined_df = self.lower_case_col_names( joined_df)
-        return joined_df
-    
     def get_post_feature(self,  df_enodeb = None, df_xlap = None, id_column = None, df_xlap_pre_stas = None):
         # get post feature for enodeb maintained 14 days ahead
         if df_enodeb is None:
@@ -527,20 +514,6 @@ class SNAP_post(SNAP):
         df_pre_post = self.round_numeric_columns( df_pre_post.select(selected_columns) )
     
         return df_pre_post
-
-    def get_enb_cord(self):
-        df_enb_cord = spark.read.format("com.databricks.spark.csv").option("header", "True").load(oracle_file)\
-                            .filter(F.col("LATITUDE_DEGREES_NAD83").isNotNull())\
-                            .filter(F.col("LONGITUDE_DEGREES_NAD83").isNotNull())\
-                            .filter(F.col("ENODEB_ID").isNotNull())\
-                            .groupby("ENODEB_ID","LATITUDE_DEGREES_NAD83","LONGITUDE_DEGREES_NAD83")\
-                            .count()\
-                            .select( col('ENODEB_ID').alias('ENODEB'), 
-                                    F.col('LATITUDE_DEGREES_NAD83').cast("double").alias('LATITUDE'), 
-                                    F.col('LONGITUDE_DEGREES_NAD83').cast("double").alias('LONGITUDE'))\
-                            .withColumn('ENODEB', lpad(col('ENODEB'), 6, '0'))\
-                            .dropDuplicates( ['ENODEB'] )
-        return df_enb_cord
 
     def calculate_metrics(self, df_post_feature_event_j, df_xlap_pre_stas, groupby_features):
         
@@ -593,7 +566,44 @@ class SNAP_post(SNAP):
         df_pre_post = df_pre_post.withColumn('has_abnormal_kpi', when(df_pre_post['abnormal_kpi'] > 0, 1).otherwise(0))
 
         return df_pre_post
-      
+
+class SNAP_post_enodeb(SNAP_post):
+    def __init__(self,*args, **kwargs): 
+        super().__init__(*args, **kwargs)
+        self.df_enb_tickets_nrb = self.get_enodeb_tickets_nrb()
+        self.df_w360_tickets = self.get_enodeb_tickets_w360()
+        self.result_df = self.patch1( self.join_df() )
+    
+    
+    def patch1(self, result_df, enodeb_date = None):
+        if enodeb_date is None:
+            enodeb_date = self.enodeb_date
+        # patch: for data with all features as zero, change its has_abnormal_kpi to 0.
+        all_zero_condition = reduce(lambda x, y: x & (col(y) == 0), features_list, lit(True)) 
+        result_df = result_df.withColumn("has_abnormal_kpi", when(all_zero_condition, 0).otherwise(col("has_abnormal_kpi")))\
+                            .withColumn("event_day", lit(enodeb_date) )
+
+        return result_df
+
+    def join_df(self, df_enb_cord = None, df_pre_post = None, df_enb_tickets_nrb = None, df_w360_tickets = None):
+        if df_enb_cord is None:
+            df_enb_cord = self.df_enb_cord
+        if df_pre_post is None:
+            df_pre_post = self.df_pre_post
+        if df_enb_tickets_nrb is None:
+            df_enb_tickets_nrb = self.df_enb_tickets_nrb
+        if df_w360_tickets is None:
+            df_w360_tickets = self.df_w360_tickets
+        joined_df = ( 
+            df_enb_cord 
+            .join(broadcast(df_pre_post), 'ENODEB', 'right') 
+            .join(broadcast(df_enb_tickets_nrb), 'ENODEB', 'left') 
+            .join(broadcast(df_w360_tickets), 'ENODEB', 'left') 
+        )
+        joined_df = self.round_numeric_columns(joined_df,decimal_places=4)
+        joined_df = self.lower_case_col_names( joined_df)
+        return joined_df
+    
     def get_enodeb_tickets_nrb(self, df_enb_list = None, date_str = None, enodeb_date = None, df_enb_cord = None):
         
         if df_enb_list is None:
@@ -772,8 +782,34 @@ class SNAP_post(SNAP):
                                 .select(F.col('enodeb_event').alias("ENODEB"),F.col('w360_ticket_counts') )
         return df_w360_tickets
 
+class SNAP_post_carrier(SNAP_post):
+    def __init__(self,*args, **kwargs): 
+        super().__init__(*args, **kwargs)
+
+        self.result_df = self.patch1( self.join_df() )
+
+
+    def join_df(self, df_enb_cord = None, df_pre_post = None, df_enb_tickets_nrb = None, df_w360_tickets = None):
+        if df_enb_cord is None:
+            df_enb_cord = self.df_enb_cord
+        if df_pre_post is None:
+            df_pre_post = self.df_pre_post
+
+        joined_df = ( 
+            df_enb_cord 
+            .join(broadcast(df_pre_post), 'ENODEB', 'right') 
+        )
+        joined_df = self.round_numeric_columns(joined_df,decimal_places=4)
+        joined_df = self.lower_case_col_names( joined_df)
+        return joined_df
+
+
 if __name__ == "__main__":
-    spark = SparkSession.builder.appName('MonitorEnodebPef_Enodeb_level').config("spark.sql.adapative.enabled","true").enableHiveSupport().getOrCreate()
+    spark = SparkSession.builder\
+            .appName('MonitorEnodebPef_Enodeb_level')\
+            .master("spark://njbbepapa1.nss.vzwnet.com:7077") \
+            .config("spark.sql.adapative.enabled","true")\
+            .enableHiveSupport().getOrCreate()
     parser = argparse.ArgumentParser(description="Inputs for generating Post SNA Maintenance Script Trial")
 
     date_str = "2023-11-29"
@@ -871,7 +907,7 @@ if __name__ == "__main__":
         xlap_enodeb_path = hdfs_title + '/user/rohitkovvuri/nokia_fsm_kpis_updated_v3/NokiaFSMKPIsSNAP_{}.csv'
         Enodeb_Pre_Feature_path = hdfs_title + "/user/ZheS/MonitorEnodebPef/enodeb/Event_Enodeb_Pre_Feature_Date/Event_Enodeb_Pre_{}.csv"
         enodeb_path = hdfs_title + "/user/ZheS/MonitorEnodebPef/enodeb/Event_Enodeb_List_Date/Event_Enodeb_List_{}.csv"
-        snap_post_instance = SNAP_post(date_str = date_str,   
+        snap_post_instance = SNAP_post_enodeb(date_str = date_str,   
                                     id_column = ['ENODEB'],   
                                     xlap_enodeb_path = xlap_enodeb_path,  
                                     Enodeb_Pre_Feature_path = Enodeb_Pre_Feature_path,  
@@ -881,44 +917,71 @@ if __name__ == "__main__":
         output_path = f"{hdfs_title}/user/ZheS/MonitorEnodebPef/enodeb/Event_Enodeb_Post_tickets_Feature_Date/{date_str}_tickets_Post_Feature_of_Enodeb/{date_str}_tickets_Post_feature_maintained_{enodeb_date}.csv" 
 
         snap_post_instance.result_df.repartition(1).write.csv(output_path, header=True, mode="overwrite") 
-
-
-
-
     
     def one_day_enodeb_post(date_str):
 
         previous_14_days = [(datetime.strptime(date_str, "%Y-%m-%d") - timedelta(days=day)).strftime("%Y-%m-%d") for day in range(14)]  
-        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor: 
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor: 
 
             executor.map(lambda enodeb_date: enodeb_post( date_str, enodeb_date), previous_14_days) 
 
 
-    loop_days = [(datetime.strptime(date_str, "%Y-%m-%d") - timedelta(days=day)).strftime("%Y-%m-%d") 
-                        for day in range(20)]  
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=100) as executor: 
-        executor.map(one_day_enodeb_post, loop_days) 
 
-"""
-    def enodeb_post(date_str,enodeb_date): 
-        xlap_enodeb_path = hdfs_title + '/user/rohitkovvuri/nokia_fsm_kpis_updated_v3/NokiaFSMKPIsSNAP_{}.csv'
-        Enodeb_Pre_Feature_path = hdfs_title + "/user/ZheS/MonitorEnodebPef/enodeb/Event_Enodeb_Pre_Feature_Date/Event_Enodeb_Pre_{}.csv"
+    """
+    flag = False
+    if flag:
+        loop_days = [(datetime.strptime(date_str, "%Y-%m-%d") - timedelta(days=day)).strftime("%Y-%m-%d") 
+                            for day in range(20)]  
+
+        with concurrent.futures.ThreadPoolExecutor() as executor: 
+            executor.map(one_day_enodeb_post, loop_days)
+    else:
+        one_day_enodeb_post( date_str )
+
+    """
+
+    def sector_post(date_str,enodeb_date): 
+        xlap_enodeb_path = hdfs_title + '/user/rohitkovvuri/fsm_sector_kpis/fsmkpis_snap_sector_{}.csv'
+        Enodeb_Pre_Feature_path = hdfs_title + "/user/ZheS/MonitorEnodebPef/Sector/Event_Enodeb_Pre_Feature_Date/Event_Enodeb_Pre_{}.csv"
         enodeb_path = hdfs_title + "/user/ZheS/MonitorEnodebPef/enodeb/Event_Enodeb_List_Date/Event_Enodeb_List_{}.csv"
-        snap_post_instance = SNAP_post(date_str = date_str,   
-                                    id_column = ['ENODEB'],   
+        snap_post_instance = SNAP_post_enodeb(date_str = date_str,   
+                                    id_column = ['ENODEB','EUTRANCELL'],   
                                     xlap_enodeb_path = xlap_enodeb_path,  
                                     Enodeb_Pre_Feature_path = Enodeb_Pre_Feature_path,  
                                     enodeb_date = enodeb_date,  
                                     enodeb_path = enodeb_path) 
 
-        output_path = f"{hdfs_title}/user/ZheS/MonitorEnodebPef/enodeb/Event_Enodeb_Post_tickets_Feature_Date/{date_str}_tickets_Post_Feature_of_Enodeb/{date_str}_tickets_Post_feature_maintained_{enodeb_date}.csv" 
+        output_path = f"{hdfs_title}/user/ZheS/MonitorEnodebPef/Sector/Event_Enodeb_Post_tickets_Feature_Date/{date_str}_tickets_Post_Feature_of_Enodeb/{date_str}_tickets_Post_feature_maintained_{enodeb_date}.csv" 
+
+        snap_post_instance.result_df.repartition(1).write.csv(output_path, header=True, mode="overwrite") 
+    
+
+
+    def carrier_post(date_str,enodeb_date): 
+        xlap_enodeb_path = hdfs_title + '/user/rohitkovvuri/nokia_fsm_kpis_updated_v5/FSMKPIsSNAP_{}.csv'
+        Enodeb_Pre_Feature_path = hdfs_title + "/user/ZheS/MonitorEnodebPef/Carrier/Event_Enodeb_Pre_Feature_Date/Event_Enodeb_Pre_{}.csv"
+        enodeb_path = hdfs_title + "/user/ZheS/MonitorEnodebPef/enodeb/Event_Enodeb_List_Date/Event_Enodeb_List_{}.csv"
+        snap_post_instance = SNAP_post_enodeb(date_str = date_str,   
+                                    id_column = ['ENODEB','EUTRANCELL','CARRIER'],   
+                                    xlap_enodeb_path = xlap_enodeb_path,  
+                                    Enodeb_Pre_Feature_path = Enodeb_Pre_Feature_path,  
+                                    enodeb_date = enodeb_date,  
+                                    enodeb_path = enodeb_path) 
+
+        output_path = f"{hdfs_title}/user/ZheS/MonitorEnodebPef/Carrier/Event_Enodeb_Post_tickets_Feature_Date/{date_str}_tickets_Post_Feature_of_Enodeb/{date_str}_tickets_Post_feature_maintained_{enodeb_date}.csv" 
 
         snap_post_instance.result_df.repartition(1).write.csv(output_path, header=True, mode="overwrite") 
 
-    # Generate dates for the 14 days prior to a given date  
-    previous_14_days = [(datetime.strptime(date_str, "%Y-%m-%d") - timedelta(days=day)).strftime("%Y-%m-%d") for day in range(14)]  
-    with concurrent.futures.ThreadPoolExecutor(max_workers=100) as executor: 
+    date_strs = [ (date.today() - timedelta(days= i) ).strftime("%Y-%m-%d") for i in range(1,20) ]
+    
+    for date_str in date_strs:
+        previous_14_days = [(datetime.strptime(date_str, "%Y-%m-%d") - timedelta(days=day)).strftime("%Y-%m-%d") for day in range(14)]  
 
-        executor.map(lambda enodeb_date: enodeb_post( date_str, enodeb_date), previous_14_days) 
-"""
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor: 
+
+            executor.map(lambda enodeb_date: sector_post( date_str, enodeb_date), previous_14_days) 
+        
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor: 
+
+            executor.map(lambda enodeb_date: carrier_post( date_str, enodeb_date), previous_14_days) 
