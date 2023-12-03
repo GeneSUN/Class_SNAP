@@ -18,27 +18,29 @@ from functools import reduce
 from operator import add 
 from math import radians, cos, sin, asin, sqrt
 import concurrent.futures 
-
-from class_SNAP import SNAP_pre_enodeb, get_date_window
+import sys 
+sys.path.append('/usr/apps/vmas/script/ZS/SNAP') 
+from class_SNAP import SNAP_pre_carrier, get_date_window
 
 from hdfs import InsecureClient 
 
-def pre_enodeb(date_str, sourse_path, path_list, id_column):
+def pre_sector(spark, date_str, sector_source, sector_path_list, event_enodeb_path, id_column):
 
-    SnapPreEnodeb = SNAP_pre_enodeb( 
-        date_str=date_str, 
-        id_column= id_column, 
-        xlap_enodeb_path=sourse_path
+    SnapPreSector = SNAP_pre_carrier( 
+        sparksession = spark,
+        date_str = date_str, 
+        id_column=id_column, 
+        xlap_enodeb_path = sector_source,
+        event_enodeb_path = event_enodeb_path    
     ) 
 
     dataframes_list = [ 
-        (SnapPreEnodeb.df_event_enodeb, path_list[0]), 
-        (SnapPreEnodeb.df_event_enodeb_daily_features, path_list[1]), 
-        (SnapPreEnodeb.df_enodeb_stats, path_list[2]) 
+        (SnapPreSector.df_event_enodeb_daily_features, sector_path_list[0]), 
+        (SnapPreSector.df_enodeb_stats, sector_path_list[1]) 
     ] 
 
     for df, output_path in dataframes_list: 
-        df.repartition(1).write.csv(output_path, header=True, mode="overwrite") 
+        df.repartition(1).write.csv(output_path, header=True, mode="overwrite")
 
 if __name__ == "__main__":
 
@@ -52,13 +54,13 @@ if __name__ == "__main__":
 
     
     date_str = (date.today() - timedelta(1) ).strftime("%Y-%m-%d")
+    date_str = "2023-11-30"
 
     hdfs_title = 'hdfs://njbbvmaspd11.nss.vzwnet.com:9000/'
-    sourse_path = hdfs_title + "/user/rohitkovvuri/nokia_fsm_kpis_updated_v3/NokiaFSMKPIsSNAP_{}.csv"
-    path_list = ["/user/ZheS/MonitorEnodebPef/enodeb/Event_Enodeb_List_Date/Event_Enodeb_List_{}.csv",
-                "/user/ZheS/MonitorEnodebPef/enodeb//Daily_KPI_14_days_pre_Event/Daily_KPI_14_days_pre_{}.csv",
-                "/user/ZheS/MonitorEnodebPef/enodeb/Event_Enodeb_Pre_Feature_Date/Event_Enodeb_Pre_{}.csv"]
-    path_list = [ hdfs_title + path.format(date_str) for path in path_list]
-    id_column = ['ENODEB']
-
-    pre_enodeb(date_str,sourse_path, path_list, id_column)
+    sector_source = hdfs_title + "/user/rohitkovvuri/fsm_sector_kpis/fsmkpis_snap_sector_{}.csv"
+    event_enodeb_path = hdfs_title+"/user/ZheS/MonitorEnodebPef/enodeb/Event_Enodeb_List_Date/Event_Enodeb_List_{}.csv"
+    sector_path_list = ["/user/ZheS/MonitorEnodebPef/Sector/Daily_KPI_14_days_pre_Event/Daily_KPI_14_days_pre_{}.csv",
+                "/user/ZheS/MonitorEnodebPef/Sector/Event_Enodeb_Pre_Feature_Date/Event_Enodeb_Pre_{}.csv"]
+    sector_path_list = [ hdfs_title + path.format(date_str) for path in sector_path_list]
+    id_column = ['ENODEB', "EUTRANCELL"]
+    pre_sector(spark, date_str, sector_source, sector_path_list, event_enodeb_path, id_column)
