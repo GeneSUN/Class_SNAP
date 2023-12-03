@@ -113,9 +113,11 @@ class SNAP():
     features_list = features_list_inc + features_list_dec
 
     def __init__(self, 
+                 sparksession,
                  date_str, 
                  id_column, 
                 ) -> None:
+        self.spark = sparksession
         self.date_str = date_str
         self.id_column = id_column
 
@@ -139,7 +141,7 @@ class SNAP():
         for d in date_range: 
             file_path = file_path_pattern.format(d) 
             try:
-                df_kpis = spark.read.option("header", "true").csv(file_path)
+                df_kpis = self.spark.read.option("header", "true").csv(file_path)
                 
                 if func is not None:
                     df_kpis = func(df_kpis)
@@ -381,46 +383,10 @@ class SNAP_pre_enodeb(SNAP):
         
         return df_agg_features
 
-
 class SNAP_pre_carrier(SNAP_pre_enodeb):
     def __init__(self,event_enodeb_path, *args, **kwargs): 
         self.event_enodeb_path = event_enodeb_path
         super().__init__(*args, **kwargs)
-
-    def preprocess_xlap(self, df, Strings_to_Numericals): 
-        """ 
-        Preprocesses the given DataFrame containing XLAP data. 
-        This function performs the following operations: 
-        1. Converts specified string-type columns to numerical values. 
-        2. Removes duplicates from the DataFrame. 
-        3. pad '0' if only 5 digits the 'ENODEB' column. (12345 to 012345)
-        4. Converts the 'DAY' column from 'MM/dd/yyyy' format to 'yyyy-MM-dd'. 
-        5. Selects the first element of duplicated 'SITE' values and retains unique records. 
-
-        Args: 
-            df (pyspark.sql.DataFrame): Input DataFrame containing XLAP data. 
-            
-        Returns: 
-            pyspark.sql.DataFrame: Processed DataFrame after applying the necessary transformations. 
-        """ 
-        
-        df = df.filter(~(F.col("ENODEB") == "*"))\
-                .filter(F.col("ENODEB").isNotNull())\
-                .withColumn('ENODEB', lpad(col('ENODEB'), 6, '0'))\
-                .withColumn("DAY", F.to_date(F.col("DAY"), "MM/dd/yyyy"))\
-                .withColumn("DAY", F.date_format(F.col("DAY"), "yyyy-MM-dd"))\
-                .select([F.col(column).cast('double') if column in Strings_to_Numericals else F.col(column) for column in df.columns])\
-                .dropDuplicates() 
-        if "RTP_Gap_Duration_Ratio_Avg%" not in df.columns:
-            df = df.withColumn("RTP_Gap_Duration_Ratio_Avg%", lit(0))
-        # during data transmission, we have few duplicate data with different SITE
-        # such as "NEW YORK CITY" and "NEW YORK C", which should be same
-        column_name = df.columns 
-        column_name.remove('SITE') 
-        df = df.groupBy(column_name).agg(first('SITE').alias('SITE')).select(df.columns) 
-    
-        return df
-
     
     def get_event_df(self, event_enodeb_path = None, date_str = None):
 
@@ -429,7 +395,7 @@ class SNAP_pre_carrier(SNAP_pre_enodeb):
         if date_str is None:
             date_str = self.date_str
         try:
-            df = spark.read.option("header", "true").csv(event_enodeb_path.format(date_str))
+            df = self.spark.read.option("header", "true").csv(event_enodeb_path.format(date_str))
         except Exception as e:
             if datetime.strptime(date_str, "%Y-%m-%d").weekday() < 5 or date_str in ["2023-11-27","2023-11-24", "2023-11-23", "2023-12-25"] :
                 pass
@@ -457,10 +423,10 @@ class SNAP_post(SNAP):
         self.enodeb_date = enodeb_date
         self.enodeb_path = enodeb_path
 
-        self.df_xlap = self.preprocess_xlap( spark.read.option("header", "true")
+        self.df_xlap = self.preprocess_xlap( self.spark.read.option("header", "true")
                                             .csv(self.xlap_enodeb_path.format(self.date_str) ), fsm_sea_features_list)
-        self.df_enodeb = spark.read.option("header", "true").csv(self.enodeb_path.format(self.enodeb_date))
-        self.df_xlap_pre_stas = spark.read.option("header", "true")\
+        self.df_enodeb = self.spark.read.option("header", "true").csv(self.enodeb_path.format(self.enodeb_date))
+        self.df_xlap_pre_stas = self.spark.read.option("header", "true")\
                                         .csv( self.Enodeb_Pre_Feature_path.format(self.enodeb_date) )
         self.df_pre_post = self.get_post_feature()
         self.df_enb_cord = self.get_enb_cord()
@@ -475,7 +441,7 @@ class SNAP_post(SNAP):
 
         return result_df
     def get_enb_cord(self):
-        df_enb_cord = spark.read.format("com.databricks.spark.csv").option("header", "True").load(oracle_file)\
+        df_enb_cord = self.spark.read.format("com.databricks.spark.csv").option("header", "True").load(oracle_file)\
                             .filter(F.col("LATITUDE_DEGREES_NAD83").isNotNull())\
                             .filter(F.col("LONGITUDE_DEGREES_NAD83").isNotNull())\
                             .filter(F.col("ENODEB_ID").isNotNull())\
@@ -644,7 +610,7 @@ class SNAP_post_enodeb(SNAP_post):
         
         tickets_path='hdfs://njbbepapa1.nss.vzwnet.com:9000/user/kovvuve/epa_tickets/epa_tickets_{}-*.csv.gz'
 
-        df_tickets = spark.read.option("header","true").option("delimiter", "|}{|")\
+        df_tickets = self.spark.read.option("header","true").option("delimiter", "|}{|")\
                                 .csv(tickets_path.format(date_str))\
                             .dropDuplicates()\
                             .filter(F.col("lat").isNotNull())\
@@ -740,7 +706,7 @@ class SNAP_post_enodeb(SNAP_post):
                                             F.desc("lat_enb"),
                                             F.desc("lng_enb"))
         
-        df_kpis_w360 = spark.read.option("header","true")\
+        df_kpis_w360 = self.spark.read.option("header","true")\
                         .csv("hdfs://njbbepapa1.nss.vzwnet.com:9000//fwa/workorder_oracle/DT={}".format(date_start))\
                         .dropDuplicates().withColumn("data_date",F.lit(date_start))
 
@@ -748,7 +714,7 @@ class SNAP_post_enodeb(SNAP_post):
             date_val = get_date_window(date_start,idate)[-1]
             
             try:
-                df_temp_kpi = spark.read.option("header","true")\
+                df_temp_kpi = self.spark.read.option("header","true")\
                                 .csv("hdfs://njbbepapa1.nss.vzwnet.com:9000//fwa/workorder_oracle/DT={}".format(date_val))\
                                 .dropDuplicates()\
                                 .withColumn("data_date",F.lit(date_val))
