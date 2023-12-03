@@ -342,7 +342,7 @@ class SNAP_pre_enodeb(SNAP):
         features_without_s1u = [e for e in features_list if e not in distinct_column]
         df_event_enodeb_daily_features = self.fill_allday_zero_with_NA(df_event_enodeb_daily_features, features_without_s1u, ["day"] + id_column) 
         return df_event_enodeb_daily_features
-        df_event_enodeb_daily_features.repartition(1).write.csv(daily_outputpath.format(date_before_td), header=True, mode="overwrite") 
+
 
     def get_enodeb_stats(self,df_event_enodeb_daily_features = None, id_column =None):
         if df_event_enodeb_daily_features is None:

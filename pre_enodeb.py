@@ -23,9 +23,10 @@ from class_SNAP import SNAP_pre_enodeb, get_date_window
 
 from hdfs import InsecureClient 
 
-def pre_enodeb(date_str, sourse_path, path_list, id_column):
+def pre_enodeb(spark, date_str, sourse_path, path_list, id_column):
 
     SnapPreEnodeb = SNAP_pre_enodeb( 
+        sparksession = spark,
         date_str=date_str, 
         id_column= id_column, 
         xlap_enodeb_path=sourse_path
@@ -61,4 +62,4 @@ if __name__ == "__main__":
     path_list = [ hdfs_title + path.format(date_str) for path in path_list]
     id_column = ['ENODEB']
 
-    pre_enodeb(date_str,sourse_path, path_list, id_column)
+    pre_enodeb(spark,date_str,sourse_path, path_list, id_column)
