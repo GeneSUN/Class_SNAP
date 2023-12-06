@@ -46,15 +46,16 @@ if __name__ == "__main__":
 
 #----------------------------------------------------------------------------------------------------------------------------
     spark = SparkSession.builder\
-            .appName('MonitorEnodebPef_Enodeb_level')\
+            .appName('MonitorEnodebPef_Carrier_level')\
             .master("spark://njbbepapa1.nss.vzwnet.com:7077") \
             .config("spark.sql.adapative.enabled","true")\
             .enableHiveSupport().getOrCreate()
-    parser = argparse.ArgumentParser(description="Inputs for generating Post SNA Maintenance Script Trial")
-
     
-    date_str = (date.today() - timedelta(1) ).strftime("%Y-%m-%d")
-    date_str = "2023-11-30"
+    parser = argparse.ArgumentParser(description="Inputs") 
+    parser.add_argument("--date", default=(date.today() - timedelta(1) ).strftime("%Y-%m-%d")) 
+    args = parser.parse_args()
+    date_str = args.date
+
     hdfs_title = 'hdfs://njbbvmaspd11.nss.vzwnet.com:9000/'
     
     carrier_source = hdfs_title + "/user/rohitkovvuri/nokia_fsm_kpis_updated_v5/FSMKPIsSNAP_{}.csv"

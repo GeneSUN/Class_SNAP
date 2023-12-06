@@ -50,19 +50,15 @@ if __name__ == "__main__":
             .master("spark://njbbepapa1.nss.vzwnet.com:7077") \
             .config("spark.sql.adapative.enabled","true")\
             .enableHiveSupport().getOrCreate()
+    
     parser = argparse.ArgumentParser(description="Inputs") 
-    parser.add_argument("--date", default=datetime.today().strftime('%Y-%m-%d')) 
+    parser.add_argument("--date", default=(date.today() - timedelta(1) ).strftime("%Y-%m-%d")) 
     args = parser.parse_args()
     date_str = args.date
-    if date_str == "no date input from shell script":
-        date_str = (date.today() - timedelta(1) ).strftime("%Y-%m-%d")
 
     mail_sender = MailSender() 
-    mail_sender.send(text = date_str)
-    """
+
     try:
-        date_str = (date.today() - timedelta(1) ).strftime("%Y-%m-%d")
-        #date_str = "2023-11-30"
         hdfs_title = 'hdfs://njbbvmaspd11.nss.vzwnet.com:9000/'
         sourse_path = hdfs_title + "/user/rohitkovvuri/nokia_fsm_kpis_updated_v3/NokiaFSMKPIsSNAP_{}.csv"
         path_list = ["/user/ZheS/MonitorEnodebPef/enodeb/Event_Enodeb_List_Date/Event_Enodeb_List_{}.csv",
@@ -77,23 +73,20 @@ if __name__ == "__main__":
 
     except Exception as e:
         print(e)
-        mail_sender = MailSender() 
-        mail_sender.send(send_from="sassupport@verizon.com", 
-        send_to=["zhe.sun@verizonwireless.com"], 
-        subject="insufficient Enodeb data", 
-        cc=[], 
-        text=f"an error occured at pre_enodeb code: {e}") 
+        mail_sender.send(
+                        subject="Error of code pre_enodeb.py", 
+                        text=f"an error occured at pre_enodeb code: {e}"
+                        ) 
     
     else:
         
-        if df_kpis.count() < 1000:
+        if df_kpis.count() < 1:
             mail_sender = MailSender() 
-            mail_sender.send(send_from="sassupport@verizon.com", 
-            send_to=["zhe.sun@verizonwireless.com"], 
-            subject="insufficient Enodeb data", 
-            cc=[], 
-            text=f"no enodeb list at {date_str}") 
+            mail_sender.send(
+                            subject=f"Empty Enodeb List at {date_str}", 
+                            cc=[], 
+                            text=f"no enodeb list at {date_str}") 
     finally:
         pass
 
-    """
+
