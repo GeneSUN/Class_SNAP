@@ -260,12 +260,12 @@ if __name__ == "__main__":
         }
     
     expected_delay = {  
-                    'snap_data_pre_enb': '2', 
-                    'snap_data_post_enb': '2', 
-                    'snap_data_pre_sector': '2', 
-                    'snap_data_post_sector': '2', 
-                    'snap_data_pre_carrier': '2', 
-                    'snap_data_post_carrier': '2', 
+                    'snap_data_pre_enb': '1', 
+                    'snap_data_post_enb': '1', 
+                    'snap_data_pre_sector': '1', 
+                    'snap_data_post_sector': '1', 
+                    'snap_data_pre_carrier': '1', 
+                    'snap_data_post_carrier': '1', 
                     }
 
 
