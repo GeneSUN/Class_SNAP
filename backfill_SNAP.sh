@@ -5,8 +5,8 @@ export SPARK_HOME=/usr/apps/vmas/spark-3.2.0-bin-hadoop3.2
 export PYSPARK_PYTHON=/usr/apps/vmas/anaconda3/bin/python3 
 
 # Define the date range 
-start_date="2023-12-04" 
-end_date="2023-12-11" 
+start_date="2023-11-12" 
+end_date="2023-12-10" 
  
 echo "RES: Starting===" 
 echo $(date) 
@@ -20,11 +20,11 @@ while [ "$current_date" != "$end_date" ]; do
   echo "Processing date: $current_date" 
 
   # Modify your commands to use the current date variable 
-  $spark_submit_command /usr/apps/vmas/script/ZS/SNAP/enodeb/pre_enodeb.py --date "$current_date" > /usr/apps/vmas/script/ZS/SNAP/enodeb/pre_enodeb.log 
-  $spark_submit_command /usr/apps/vmas/script/ZS/SNAP/enodeb/post_enodeb.py --date "$current_date" > /usr/apps/vmas/script/ZS/SNAP/enodeb/post_enodeb.log 
-  $spark_submit_command /usr/apps/vmas/script/ZS/SNAP/sector/pre_sector.py --date "$current_date" > /usr/apps/vmas/script/ZS/SNAP/sector/pre_sector.log 
-  $spark_submit_command /usr/apps/vmas/script/ZS/SNAP/sector/post_sector.py --date "$current_date" > /usr/apps/vmas/script/ZS/SNAP/sector/post_sector.log 
-  $spark_submit_command /usr/apps/vmas/script/ZS/SNAP/carrier/pre_carrier.py --date "$current_date" > /usr/apps/vmas/script/ZS/SNAP/carrier/pre_carrier.log 
+  #$spark_submit_command /usr/apps/vmas/script/ZS/SNAP/enodeb/pre_enodeb.py --date "$current_date" > /usr/apps/vmas/script/ZS/SNAP/enodeb/pre_enodeb.log 
+  #$spark_submit_command /usr/apps/vmas/script/ZS/SNAP/enodeb/post_enodeb.py --date "$current_date" > /usr/apps/vmas/script/ZS/SNAP/enodeb/post_enodeb.log 
+  #$spark_submit_command /usr/apps/vmas/script/ZS/SNAP/sector/pre_sector.py --date "$current_date" > /usr/apps/vmas/script/ZS/SNAP/sector/pre_sector.log 
+  #$spark_submit_command /usr/apps/vmas/script/ZS/SNAP/sector/post_sector.py --date "$current_date" > /usr/apps/vmas/script/ZS/SNAP/sector/post_sector.log 
+  #$spark_submit_command /usr/apps/vmas/script/ZS/SNAP/carrier/pre_carrier.py --date "$current_date" > /usr/apps/vmas/script/ZS/SNAP/carrier/pre_carrier.log 
   $spark_submit_command /usr/apps/vmas/script/ZS/SNAP/carrier/post_carrier.py --date "$current_date" > /usr/apps/vmas/script/ZS/SNAP/carrier/post_carrier.log 
   # Increment the current date 
   current_date=$(date -d "$current_date + 1 day" +%Y-%m-%d) 

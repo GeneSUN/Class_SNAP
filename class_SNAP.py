@@ -1,4 +1,3 @@
-
 from pyspark.sql.window import Window 
 from pyspark.sql import SparkSession 
 from pyspark.sql import functions as F 
@@ -763,7 +762,6 @@ class SNAP_post_enodeb(SNAP_post):
                                 .select(F.col('enodeb_event').alias("ENODEB"),F.col('w360_ticket_counts') )
         return df_w360_tickets
 
-
 class SNAP_post_carrier(SNAP_post):
     def __init__(self,*args, **kwargs): 
         super().__init__(*args, **kwargs)
@@ -783,7 +781,7 @@ class SNAP_post_carrier(SNAP_post):
         oracle_file = f"hdfs://njbbepapa1.nss.vzwnet.com:9000/fwa/atoll_oracle_daily/date={date_str}"
 
         if id_column == ['ENODEB','EUTRANCELL','CARRIER']:
-            df_add = spark.read.option("header","true").csv(oracle_file)\
+            df_add = self.spark.read.option("header","true").csv(oracle_file)\
                             .select( 
                                         col('ENODEB_ID').alias(id_column[0]), 
                                         col('SECTOR').alias(id_column[1]),
@@ -792,7 +790,7 @@ class SNAP_post_carrier(SNAP_post):
                                     )\
                             .withColumn('ENODEB', lpad(col('ENODEB'), 6, '0'))
         elif id_column == ['ENODEB','EUTRANCELL']:
-            df_add = spark.read.option("header","true").csv(oracle_file)\
+            df_add = self.spark.read.option("header","true").csv(oracle_file)\
                         .select( 
                                     col('ENODEB_ID').alias(id_column[0]), 
                                     col('SECTOR').alias(id_column[1]),
@@ -817,7 +815,7 @@ class SNAP_post_carrier(SNAP_post):
         joined_df = self.lower_case_col_names( joined_df)
         return joined_df
 
-
+	
 if __name__ == "__main__":
     spark = SparkSession.builder\
             .appName('MonitorEnodebPef_Enodeb_level')\

@@ -43,16 +43,14 @@ if __name__ == "__main__":
 
 #----------------------------------------------------------------------------------------------------------------------------
     spark = SparkSession.builder\
-            .appName('MonitorEnodebPef_Sector_Post')\
+            .appName('MonitorEnodebPef_Enodeb_level')\
             .master("spark://njbbepapa1.nss.vzwnet.com:7077") \
             .config("spark.sql.adapative.enabled","true")\
             .enableHiveSupport().getOrCreate()
+    parser = argparse.ArgumentParser(description="Inputs for generating Post SNA Maintenance Script Trial")
     
-    parser = argparse.ArgumentParser(description="Inputs") 
-    parser.add_argument("--date", default=(date.today() - timedelta(1) ).strftime("%Y-%m-%d")) 
-    args = parser.parse_args()
-    date_str = args.date
-    
+    date_str = (date.today() - timedelta(1) ).strftime("%Y-%m-%d")
+    #date_str = "2023-12-02"
     id_column = ['ENODEB', 'EUTRANCELL']
 
     hdfs_title = 'hdfs://njbbvmaspd11.nss.vzwnet.com:9000/'
@@ -63,7 +61,6 @@ if __name__ == "__main__":
     previous_14_days = [(datetime.strptime(date_str, "%Y-%m-%d") - timedelta(days=day)).strftime("%Y-%m-%d") for day in range(14)]  
 
     import concurrent
-    from concurrent import futures
     with concurrent.futures.ThreadPoolExecutor() as executor: 
         executor.map(lambda enodeb_date: post_sector(spark,
                                                      date_str,
@@ -73,5 +70,7 @@ if __name__ == "__main__":
                                                      enodeb_date, 
                                                      enodeb_path), 
                                                                     previous_14_days) 
-
-    #post_sector(spark,date_str,id_column, xlap_sector_path, Sector_Pre_Feature_path, previous_14_days[-1],enodeb_path)
+    try:
+        post_sector(spark,date_str,id_column, xlap_sector_path, Sector_Pre_Feature_path, previous_14_days[-1],enodeb_path).show()
+    except:
+        post_sector(spark,date_str,id_column, xlap_sector_path, Sector_Pre_Feature_path, previous_14_days[-3],enodeb_path).show()
