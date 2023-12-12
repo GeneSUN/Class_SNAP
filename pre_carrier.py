@@ -46,7 +46,7 @@ if __name__ == "__main__":
 
 #----------------------------------------------------------------------------------------------------------------------------
     spark = SparkSession.builder\
-            .appName('MonitorEnodebPef_Carrier_level')\
+            .appName('MonitorEnodebPef_Carrier_Pre')\
             .master("spark://njbbepapa1.nss.vzwnet.com:7077") \
             .config("spark.sql.adapative.enabled","true")\
             .enableHiveSupport().getOrCreate()
