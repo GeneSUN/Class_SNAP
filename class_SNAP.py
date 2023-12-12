@@ -1,4 +1,3 @@
-
 from pyspark.sql.window import Window 
 from pyspark.sql import SparkSession 
 from pyspark.sql import functions as F 
@@ -19,7 +18,6 @@ from functools import reduce
 from operator import add 
 from math import radians, cos, sin, asin, sqrt
 import concurrent.futures 
-
 def get_date_window(start_date, days = 1, direction = "backward", formation ="str", end_time = None ): 
     from datetime import datetime, timedelta, date
     # Calculate the end date and start_date--------------------------------------
@@ -39,7 +37,6 @@ def get_date_window(start_date, days = 1, direction = "backward", formation ="st
             direction = "forward"
         else:
             direction = "backward"
-
     # Generate the date range and format them as strings -------------------------------
     date_list = []
     if direction.lower() == 'backward':
@@ -65,19 +62,14 @@ def get_date_window(start_date, days = 1, direction = "backward", formation ="st
     
     return date_list
 def round_numeric_columns(df, decimal_places=2, numeric_columns = None): 
-
     if numeric_columns == None:
         numeric_columns = [col_name for col_name, data_type in df.dtypes if data_type == "double" or data_type == "float"]
-
     # Apply rounding to all numeric columns 
     for col_name in numeric_columns: 
         df = df.withColumn(col_name, round(df[col_name], decimal_places)) 
         
     return df
-
-
 class SNAP():
-
     global hdfs_title, categorical_column, fsm_column_mapping, sea_column_mapping, distinct_column,fsm_s1u_features, fsm_features,\
     sea_features, sea_s1u_features, fsm_sea_features_list, features_list_inc, features_list_dec, features_list
     hdfs_title = "hdfs://njbbvmaspd11.nss.vzwnet.com:9000/"
@@ -91,7 +83,6 @@ class SNAP():
         "FSM_LTE_RRCF%": "rrc_setup_failure",
         "RTP_Gap_Duration_Ratio_Avg%": "rtp_gap"
     } 
-
     sea_column_mapping = { 
         "SEA_AvgRRCconnectedUsers_percell": "avgconnected_users", 
         "SEA_TotalDLRLCLayerDataVolume_MB": "dl_data_volume", 
@@ -104,14 +95,12 @@ class SNAP():
     features_list_inc = ['sip_dc_rate', 'rrc_setup_failure', 'bearer_drop_rate',"rtp_gap"]
     features_list_dec = ['avgconnected_users', 'dl_data_volume','uptp_user_perceived_throughput']
     distinct_column = ["RTP_Gap_Duration_Ratio_Avg%","S1U_SIP_SC_CallDrop%"]
-
     fsm_s1u_features= list( fsm_column_mapping.keys() ) # count "S1U_SIP_SC_CallDrop%"
     fsm_features = [feature for feature in fsm_s1u_features if feature not in distinct_column]
     sea_s1u_features = list( sea_column_mapping.keys() )
     sea_features = [feature for feature in sea_s1u_features if feature not in distinct_column]
     fsm_sea_features_list =  fsm_s1u_features + sea_features
     features_list = features_list_inc + features_list_dec
-
     def __init__(self, 
                  sparksession,
                  date_str, 
@@ -120,15 +109,10 @@ class SNAP():
         self.spark = sparksession
         self.date_str = date_str
         self.id_column = id_column
-
-
     def union_df_list(self, df_list):   
-
         df_post = reduce(lambda df1, df2: df1.union(df2), df_list)
-
         return df_post.dropDuplicates()
     def process_csv_files(self, date_range, file_path_pattern, func = None): 
-
         """ 
         Reads CSV files from HDFS for the given date range and file path pattern and processes them.
         Args: 
@@ -150,9 +134,7 @@ class SNAP():
             except Exception as e:
                 print(e)
                 #print(f"data missing at {file_path}")
-
         return df_list
-
     def preprocess_xlap(self, df, Strings_to_Numericals): 
         """ 
         Preprocesses the given DataFrame containing XLAP data. 
@@ -162,7 +144,6 @@ class SNAP():
         3. pad '0' if only 5 digits the 'ENODEB' column. (12345 to 012345)
         4. Converts the 'DAY' column from 'MM/dd/yyyy' format to 'yyyy-MM-dd'. 
         5. Selects the first element of duplicated 'SITE' values and retains unique records. 
-
         Args: 
             df (pyspark.sql.DataFrame): Input DataFrame containing XLAP data. 
             
@@ -187,22 +168,16 @@ class SNAP():
     
         return df
     def rename_features(self, df, column_mapping): 
-
         for old_col, new_col in column_mapping.items(): 
             df = df.withColumnRenamed(old_col, new_col)
             
         return df
-
     def lower_case_col_names(self, df, lower_case_cols_list=None): 
-
         if lower_case_cols_list is None: 
             lower_case_cols_list = df.columns 
-
         for col_name in lower_case_cols_list: 
             df = df.withColumnRenamed(col_name, col_name.lower()) 
-
         return df 
-
     def fill_allday_zero_with_NA(self, df, features_list, groupby_columns):
         """ 
         Fill samples with all zero values in specified features with 'None' (NA) for non-enodeb columns.
@@ -226,29 +201,23 @@ class SNAP():
         df_return = df_without_null.union(fill_zero_na_df)
         
         return df_return
-
     def round_numeric_columns(self, df, decimal_places=2, numeric_columns = None): 
-
         if numeric_columns == None:
             numeric_columns = [col_name for col_name, data_type in df.dtypes if data_type == "double" or data_type == "float"]
-
         # Apply rounding to all numeric columns 
         for col_name in numeric_columns: 
             df = df.withColumn(col_name, round(df[col_name], decimal_places)) 
             
         return df
-
 class SNAP_pre_enodeb(SNAP):
     
     def __init__(self,xlap_enodeb_path, *args, **kwargs): 
         super().__init__(*args, **kwargs)
         self.xlap_enodeb_path = xlap_enodeb_path
-
         self.df_xlap_14 = self.read_pre_14_days()
         self.df_event_enodeb = self.get_event_df()
         self.df_event_enodeb_daily_features = self.fsm_feature_daily() 
         self.df_enodeb_stats = self.get_enodeb_stats()
-
     def read_pre_14_days(self, date_str = None):
         
         if date_str is None:
@@ -268,14 +237,10 @@ class SNAP_pre_enodeb(SNAP):
         that experience change from Nokia to Samsung 
         Args: 
         df_kpis (DataFrame): A PySpark DataFrame containing network performance data. including enodeb, DAY, and FSM/SEA related features
-
         Returns: 
         dataframe: A dataframe with 'ENODEB' values that meet the criteria. 
-
         This function performs the following steps: 
-
         1. Filters network nodes where the sum of Samsung features is 0. which means the enodeb does not have maintenance the entire time window. 
-
         2. Calculates the remaining network nodes by subtracting excluded nodes from the total nodes. 
         
         3. 
@@ -318,10 +283,8 @@ class SNAP_pre_enodeb(SNAP):
                         .withColumnRenamed("first_positive_samsung_day","event_date" )
         
         return return_df
-
     def fsm_feature_daily(self, df_event_enodeb = None, df_xlap_14 =None, date_str =None, id_column = None, \
                           ):
-
         if df_event_enodeb is None:
             df_event_enodeb = self.df_event_enodeb
         if df_xlap_14 is None:
@@ -330,20 +293,15 @@ class SNAP_pre_enodeb(SNAP):
             date_str = self.date_str
         if id_column is None:
             id_column = self.id_column
-
         broadcast_df = broadcast(df_event_enodeb.select('ENODEB',"event_date") ) 
         df_event_enodeb_daily_features = df_xlap_14.join(broadcast_df, 'ENODEB', "inner")\
                                                         .filter( col('DAY')!=date_str )\
                                                         .select(categorical_column + id_column + fsm_s1u_features+ ["event_date"])
-
         df_event_enodeb_daily_features = self.rename_features(df_event_enodeb_daily_features, fsm_column_mapping)
         df_event_enodeb_daily_features = self.lower_case_col_names(df_event_enodeb_daily_features)
-
         features_without_s1u = [e for e in features_list if e not in distinct_column]
         df_event_enodeb_daily_features = self.fill_allday_zero_with_NA(df_event_enodeb_daily_features, features_without_s1u, ["day"] + id_column) 
         return df_event_enodeb_daily_features
-
-
     def get_enodeb_stats(self,df_event_enodeb_daily_features = None, id_column =None):
         if df_event_enodeb_daily_features is None:
             df_event_enodeb_daily_features = self.df_event_enodeb_daily_features
@@ -352,10 +310,8 @@ class SNAP_pre_enodeb(SNAP):
             # def enodeb_function(df,  features, groupby_feature, aggregate_functions = F.avg): 
         df_enodeb_std = self.stats_features( df_event_enodeb_daily_features,features_list, id_column, aggregate_functions = F.stddev)
         df_enodeb_avg = self.stats_features( df_event_enodeb_daily_features,features_list, id_column, aggregate_functions = F.avg)
-
         df_enodeb_stats = df_enodeb_avg.join(df_enodeb_std, on = id_column, how = "inner")
         return df_enodeb_stats
-
     def stats_features(self, df,  features, groupby_feature, aggregate_functions ): 
         """ 
         Calculates the statistics of specified features for each unique groupby_feature in a PySpark DataFrame. 
@@ -367,7 +323,6 @@ class SNAP_pre_enodeb(SNAP):
         Returns: 
             DataFrame: A new PySpark DataFrame with the mean values of the specified features for each ENODEB. 
         """ 
-
         # Create expressions to calculate the statistics for features 
         expressions = [aggregate_functions(F.col(col_name)).alias(col_name) for col_name in features] 
         
@@ -376,20 +331,17 @@ class SNAP_pre_enodeb(SNAP):
         df_agg_features = round_numeric_columns(df_agg_features, decimal_places=2) 
         
         columns_to_rename = [item for item in df_agg_features.columns if item not in groupby_feature]
-
         # Rename except enodeb 
         for column in columns_to_rename:
             df_agg_features = df_agg_features.withColumnRenamed(column, column +"_" + (aggregate_functions.__name__)[:3] ) 
         
         return df_agg_features
-
 class SNAP_pre_carrier(SNAP_pre_enodeb):
     def __init__(self,event_enodeb_path, *args, **kwargs): 
         self.event_enodeb_path = event_enodeb_path
         super().__init__(*args, **kwargs)
     
     def get_event_df(self, event_enodeb_path = None, date_str = None):
-
         if event_enodeb_path is None:
             event_enodeb_path = self.event_enodeb_path
         if date_str is None:
@@ -402,11 +354,9 @@ class SNAP_pre_carrier(SNAP_pre_enodeb):
             else:    
                 print(e, f"missing event enodeb list at {date_str}")
         return df
-
 class SNAP_post(SNAP):
     global oracle_file, avg_features_list, std_features_list, change_rate_features_list, \
     threshold_std_features_list, threshold_avg_features_list, threshold_max_features_list, alert_features_list
-
     oracle_file = "hdfs://njbbepapa1.nss.vzwnet.com:9000/fwa/atoll_oracle_daily/date=2023-10-08"
     avg_features_list = [f"{feature}_avg" for feature in features_list] 
     std_features_list = [f"{feature}_std" for feature in features_list] 
@@ -415,14 +365,12 @@ class SNAP_post(SNAP):
     threshold_avg_features_list = [f"{feature}_threshold_avg" for feature in features_list] 
     threshold_max_features_list = [f"{feature}_threshold_max" for feature in features_list] 
     alert_features_list = [f"{feature}_alert" for feature in features_list] 
-
     def __init__(self,xlap_enodeb_path, Enodeb_Pre_Feature_path, enodeb_date, enodeb_path,*args, **kwargs): 
         super().__init__(*args, **kwargs)
         self.xlap_enodeb_path = xlap_enodeb_path
         self.Enodeb_Pre_Feature_path = Enodeb_Pre_Feature_path
         self.enodeb_date = enodeb_date
         self.enodeb_path = enodeb_path
-
         self.df_xlap = self.preprocess_xlap( self.spark.read.option("header", "true")
                                             .csv(self.xlap_enodeb_path.format(self.date_str) ), fsm_sea_features_list)
         self.df_enodeb = self.spark.read.option("header", "true").csv(self.enodeb_path.format(self.enodeb_date))
@@ -430,7 +378,6 @@ class SNAP_post(SNAP):
                                         .csv( self.Enodeb_Pre_Feature_path.format(self.enodeb_date) )
         self.df_pre_post = self.get_post_feature()
         self.df_enb_cord = self.get_enb_cord()
-
     def patch1(self, result_df, enodeb_date = None):
         if enodeb_date is None:
             enodeb_date = self.enodeb_date
@@ -438,7 +385,6 @@ class SNAP_post(SNAP):
         all_zero_condition = reduce(lambda x, y: x & (col(y) == 0), features_list, lit(True)) 
         result_df = result_df.withColumn("has_abnormal_kpi", when(all_zero_condition, 0).otherwise(col("has_abnormal_kpi")))\
                             .withColumn("event_day", lit(enodeb_date) )
-
         return result_df
     def get_enb_cord(self):
         df_enb_cord = self.spark.read.format("com.databricks.spark.csv").option("header", "True").load(oracle_file)\
@@ -453,7 +399,6 @@ class SNAP_post(SNAP):
                             .withColumn('ENODEB', lpad(col('ENODEB'), 6, '0'))\
                             .dropDuplicates( ['ENODEB'] )
         return df_enb_cord
-
     def get_post_feature(self,  df_enodeb = None, df_xlap = None, id_column = None, df_xlap_pre_stas = None):
         # get post feature for enodeb maintained 14 days ahead
         if df_enodeb is None:
@@ -464,7 +409,6 @@ class SNAP_post(SNAP):
             id_column = self.id_column
         if df_xlap_pre_stas is None:
             df_xlap_pre_stas = self.df_xlap_pre_stas
-
         df_post = df_xlap.join( df_enodeb.select("enodeb"), "enodeb" )\
                                 .select(categorical_column + id_column + sea_s1u_features)
         
@@ -472,15 +416,12 @@ class SNAP_post(SNAP):
         df_post = self.rename_features(df_post, sea_column_mapping)
         
         
-
         df_pre_post = self.calculate_metrics(df_post, df_xlap_pre_stas, id_column)
-
         exclude_columns =  threshold_avg_features_list + threshold_std_features_list + threshold_max_features_list
         selected_columns = [column for column in df_pre_post.columns if column not in exclude_columns]
         df_pre_post = self.round_numeric_columns( df_pre_post.select(selected_columns) )
     
         return df_pre_post
-
     def calculate_metrics(self, df_post_feature_event_j, df_xlap_pre_stas, groupby_features):
         
         df_pre_post = df_xlap_pre_stas.join(df_post_feature_event_j, on = groupby_features, how = 'inner' )
@@ -503,7 +444,6 @@ class SNAP_post(SNAP):
             
             alert_feature = f"{feature}_alert"
             df_pre_post = df_pre_post.withColumn(alert_feature, when( col(threshold_max) < col(feature), 1).otherwise(0) )
-
         for feature in features_list_dec: 
             avg_feature = f"{feature}_avg"
             std_feature = f"{feature}_std"
@@ -522,7 +462,6 @@ class SNAP_post(SNAP):
             
             alert_feature = f"{feature}_alert"
             df_pre_post = df_pre_post.withColumn(alert_feature, when( col(threshold_max) > col(feature), 1).otherwise(0) )
-
     #--------------------------------------------------------------------------------------------
         df_pre_post = df_pre_post.withColumn("avgconnected_users_alert", lit(0))
     #--------------------------------------------------------------------------------------------    
@@ -530,9 +469,7 @@ class SNAP_post(SNAP):
         
         df_pre_post = df_pre_post.withColumn("abnormal_kpi", reduce(add, [col(x) for x in alert_list])  )
         df_pre_post = df_pre_post.withColumn('has_abnormal_kpi', when(df_pre_post['abnormal_kpi'] > 0, 1).otherwise(0))
-
         return df_pre_post
-
 class SNAP_post_enodeb(SNAP_post):
     def __init__(self,*args, **kwargs): 
         super().__init__(*args, **kwargs)
@@ -548,9 +485,7 @@ class SNAP_post_enodeb(SNAP_post):
         all_zero_condition = reduce(lambda x, y: x & (col(y) == 0), features_list, lit(True)) 
         result_df = result_df.withColumn("has_abnormal_kpi", when(all_zero_condition, 0).otherwise(col("has_abnormal_kpi")))\
                             .withColumn("event_day", lit(enodeb_date) )
-
         return result_df
-
     def join_df(self, df_enb_cord = None, df_pre_post = None, df_enb_tickets_nrb = None, df_w360_tickets = None):
         if df_enb_cord is None:
             df_enb_cord = self.df_enb_cord
@@ -580,7 +515,6 @@ class SNAP_post_enodeb(SNAP_post):
             enodeb_date = self.enodeb_date
         if df_enb_cord is None:
             df_enb_cord = self.df_enb_cord
-
         def haversine(lat2,lon2, lat1, lon1):
             if lat2 is not None and lat1 is not None and lon1 is not None and lon2 is not None :
                 """
@@ -609,7 +543,6 @@ class SNAP_post_enodeb(SNAP_post):
         window_dist=Window().partitionBy("trouble_id","status").orderBy("distance_from_enb")
         
         tickets_path='hdfs://njbbepapa1.nss.vzwnet.com:9000/user/kovvuve/epa_tickets/epa_tickets_{}-*.csv.gz'
-
         df_tickets = self.spark.read.option("header","true").option("delimiter", "|}{|")\
                                 .csv(tickets_path.format(date_str))\
                             .dropDuplicates()\
@@ -680,7 +613,6 @@ class SNAP_post_enodeb(SNAP_post):
                                         .select(F.col('enodeb_event').alias("ENODEB"), 
                                                 F.col('nrb_ticket_counts') )
                                         
-
         return df_enb_tickets
     
     def get_enodeb_tickets_w360(self, df_enb_list = None, date_start = None, enodeb_date=None):
@@ -694,7 +626,6 @@ class SNAP_post_enodeb(SNAP_post):
         date1 = datetime.strptime(date_start, "%Y-%m-%d") 
         date2 = datetime.strptime(enodeb_date, "%Y-%m-%d") 
         daysBack = (date1 - date2).days + 1
-
         df_enb_list = df_enb_list.withColumn('event_date_final',lit(enodeb_date) )\
                                 .withColumnRenamed("ENODEB","enodeb_event")\
                                 .groupby("enodeb_event")\
@@ -709,7 +640,6 @@ class SNAP_post_enodeb(SNAP_post):
         df_kpis_w360 = self.spark.read.option("header","true")\
                         .csv("hdfs://njbbepapa1.nss.vzwnet.com:9000//fwa/workorder_oracle/DT={}".format(date_start))\
                         .dropDuplicates().withColumn("data_date",F.lit(date_start))
-
         for idate in range(1,daysBack):
             date_val = get_date_window(date_start,idate)[-1]
             
@@ -747,20 +677,15 @@ class SNAP_post_enodeb(SNAP_post):
                                 .agg(F.count("ticket_source").alias('w360_ticket_counts'))\
                                 .select(F.col('enodeb_event').alias("ENODEB"),F.col('w360_ticket_counts') )
         return df_w360_tickets
-
 class SNAP_post_carrier(SNAP_post):
     def __init__(self,*args, **kwargs): 
         super().__init__(*args, **kwargs)
-
         self.result_df = self.patch1( self.join_df() )
-
-
     def join_df(self, df_enb_cord = None, df_pre_post = None, df_enb_tickets_nrb = None, df_w360_tickets = None):
         if df_enb_cord is None:
             df_enb_cord = self.df_enb_cord
         if df_pre_post is None:
             df_pre_post = self.df_pre_post
-
         joined_df = ( 
             df_enb_cord 
             .join(broadcast(df_pre_post), 'ENODEB', 'right') 
@@ -768,8 +693,6 @@ class SNAP_post_carrier(SNAP_post):
         joined_df = self.round_numeric_columns(joined_df,decimal_places=4)
         joined_df = self.lower_case_col_names( joined_df)
         return joined_df
-
-
 if __name__ == "__main__":
     spark = SparkSession.builder\
             .appName('MonitorEnodebPef_Enodeb_level')\
@@ -777,85 +700,68 @@ if __name__ == "__main__":
             .config("spark.sql.adapative.enabled","true")\
             .enableHiveSupport().getOrCreate()
     parser = argparse.ArgumentParser(description="Inputs for generating Post SNA Maintenance Script Trial")
-
     date_str = "2023-11-29"
     hdfs_title = 'hdfs://njbbvmaspd11.nss.vzwnet.com:9000/'
-
     def pre_enodeb(date_str):
         sourse_path = hdfs_title + "/user/rohitkovvuri/nokia_fsm_kpis_updated_v3/NokiaFSMKPIsSNAP_{}.csv"
         path_list = ["/user/ZheS/MonitorEnodebPef/enodeb/Event_Enodeb_List_Date/Event_Enodeb_List_{}.csv",
                     "/user/ZheS/MonitorEnodebPef/enodeb//Daily_KPI_14_days_pre_Event/Daily_KPI_14_days_pre_{}.csv",
                     "/user/ZheS/MonitorEnodebPef/enodeb/Event_Enodeb_Pre_Feature_Date/Event_Enodeb_Pre_{}.csv"]
         path_list = [ hdfs_title + path.format(date_str) for path in path_list]
-
         SnapPreEnodeb = SNAP_pre_enodeb( 
             date_str=date_str, 
             id_column=['ENODEB'], 
             xlap_enodeb_path=sourse_path
         ) 
-
         dataframes_list = [ 
             (SnapPreEnodeb.df_event_enodeb, path_list[0]), 
             (SnapPreEnodeb.df_event_enodeb_daily_features, path_list[1]), 
             (SnapPreEnodeb.df_enodeb_stats, path_list[2]) 
         ] 
-
         for df, output_path in dataframes_list: 
             df.repartition(1).write.csv(output_path, header=True, mode="overwrite") 
     #pre_enodeb(date_str)
     def pre_sector(date_str):
         sector_source = hdfs_title + "/user/rohitkovvuri/fsm_sector_kpis/fsmkpis_snap_sector_{}.csv"
         event_enodeb_path = hdfs_title+"/user/ZheS/MonitorEnodebPef/enodeb/Event_Enodeb_List_Date/Event_Enodeb_List_{}.csv"
-
         sector_path_list = ["/user/ZheS/MonitorEnodebPef/Sector//Daily_KPI_14_days_pre_Event/Daily_KPI_14_days_pre_{}.csv",
                     "/user/ZheS/MonitorEnodebPef/Sector/Event_Enodeb_Pre_Feature_Date/Event_Enodeb_Pre_{}.csv"]
                     
         sector_path_list = [ hdfs_title + path.format(date_str) for path in sector_path_list]
-
         SnapPreSector = SNAP_pre_carrier( 
             date_str = date_str, 
             id_column=['ENODEB', "EUTRANCELL"], 
             xlap_enodeb_path = sector_source,
             event_enodeb_path = event_enodeb_path    
         ) 
-
         dataframes_list = [ 
             (SnapPreSector.df_event_enodeb_daily_features, sector_path_list[0]), 
             (SnapPreSector.df_enodeb_stats, sector_path_list[1]) 
         ] 
-
         for df, output_path in dataframes_list: 
             df.repartition(1).write.csv(output_path, header=True, mode="overwrite")
     #pre_sector(date_str)
-
     def pre_carrier(date_str):
         carrier_source = hdfs_title + "/user/rohitkovvuri/nokia_fsm_kpis_updated_v5/FSMKPIsSNAP_{}.csv"
         event_enodeb_path = hdfs_title+"/user/ZheS/MonitorEnodebPef/enodeb/Event_Enodeb_List_Date/Event_Enodeb_List_{}.csv"
-
         carrier_path_list = ["/user/ZheS/MonitorEnodebPef/Carrier/Daily_KPI_14_days_pre_Event/Daily_KPI_14_days_pre_{}.csv",
                     "/user/ZheS/MonitorEnodebPef/Carrier/Event_Enodeb_Pre_Feature_Date/Event_Enodeb_Pre_{}.csv"]
                     
         carrier_path_list = [ hdfs_title + path.format(date_str) for path in carrier_path_list]
-
         SnapPreCarrier = SNAP_pre_carrier( 
             date_str = date_str, 
             id_column=['ENODEB', "EUTRANCELL","CARRIER"], 
             xlap_enodeb_path = carrier_source,
             event_enodeb_path = event_enodeb_path    
         ) 
-
         dataframes_list = [ 
             (SnapPreCarrier.df_event_enodeb_daily_features, carrier_path_list[0]), 
             (SnapPreCarrier.df_enodeb_stats, carrier_path_list[1]) 
         ] 
-
         for df, output_path in dataframes_list: 
             df.repartition(1).write.csv(output_path, header=True)
             #df.repartition(1).write.csv(output_path, header=True, mode="overwrite")
     #pre_carrier(date_str)
-
-
-
     date_range = [ (date.today() - timedelta(days= i) ).strftime("%Y-%m-%d") for i in range(1,35) ]
     """
     with concurrent.futures.ThreadPoolExecutor() as executor: 
@@ -863,12 +769,10 @@ if __name__ == "__main__":
     
     with concurrent.futures.ThreadPoolExecutor() as executor: 
         list(executor.map(pre_sector, date_range)) 
-
     with concurrent.futures.ThreadPoolExecutor() as executor: 
         list(executor.map(pre_carrier, date_range))    
     """
     
-
     def enodeb_post(date_str,enodeb_date): 
         xlap_enodeb_path = hdfs_title + '/user/rohitkovvuri/nokia_fsm_kpis_updated_v3/NokiaFSMKPIsSNAP_{}.csv'
         Enodeb_Pre_Feature_path = hdfs_title + "/user/ZheS/MonitorEnodebPef/enodeb/Event_Enodeb_Pre_Feature_Date/Event_Enodeb_Pre_{}.csv"
@@ -879,34 +783,23 @@ if __name__ == "__main__":
                                     Enodeb_Pre_Feature_path = Enodeb_Pre_Feature_path,  
                                     enodeb_date = enodeb_date,  
                                     enodeb_path = enodeb_path) 
-
         output_path = f"{hdfs_title}/user/ZheS/MonitorEnodebPef/enodeb/Event_Enodeb_Post_tickets_Feature_Date/{date_str}_tickets_Post_Feature_of_Enodeb/{date_str}_tickets_Post_feature_maintained_{enodeb_date}.csv" 
-
         snap_post_instance.result_df.repartition(1).write.csv(output_path, header=True, mode="overwrite") 
     
     def one_day_enodeb_post(date_str):
-
         previous_14_days = [(datetime.strptime(date_str, "%Y-%m-%d") - timedelta(days=day)).strftime("%Y-%m-%d") for day in range(14)]  
         with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor: 
-
             executor.map(lambda enodeb_date: enodeb_post( date_str, enodeb_date), previous_14_days) 
-
-
-
-
     """
     flag = False
     if flag:
         loop_days = [(datetime.strptime(date_str, "%Y-%m-%d") - timedelta(days=day)).strftime("%Y-%m-%d") 
                             for day in range(20)]  
-
         with concurrent.futures.ThreadPoolExecutor() as executor: 
             executor.map(one_day_enodeb_post, loop_days)
     else:
         one_day_enodeb_post( date_str )
-
     """
-
     def sector_post(date_str,enodeb_date): 
         xlap_enodeb_path = hdfs_title + '/user/rohitkovvuri/fsm_sector_kpis/fsmkpis_snap_sector_{}.csv'
         Enodeb_Pre_Feature_path = hdfs_title + "/user/ZheS/MonitorEnodebPef/Sector/Event_Enodeb_Pre_Feature_Date/Event_Enodeb_Pre_{}.csv"
@@ -917,13 +810,9 @@ if __name__ == "__main__":
                                     Enodeb_Pre_Feature_path = Enodeb_Pre_Feature_path,  
                                     enodeb_date = enodeb_date,  
                                     enodeb_path = enodeb_path) 
-
         output_path = f"{hdfs_title}/user/ZheS/MonitorEnodebPef/Sector/Event_Enodeb_Post_tickets_Feature_Date/{date_str}_tickets_Post_Feature_of_Enodeb/{date_str}_tickets_Post_feature_maintained_{enodeb_date}.csv" 
-
         snap_post_instance.result_df.repartition(1).write.csv(output_path, header=True, mode="overwrite") 
     
-
-
     def carrier_post(date_str,enodeb_date): 
         xlap_enodeb_path = hdfs_title + '/user/rohitkovvuri/nokia_fsm_kpis_updated_v5/FSMKPIsSNAP_{}.csv'
         Enodeb_Pre_Feature_path = hdfs_title + "/user/ZheS/MonitorEnodebPef/Carrier/Event_Enodeb_Pre_Feature_Date/Event_Enodeb_Pre_{}.csv"
@@ -934,20 +823,14 @@ if __name__ == "__main__":
                                     Enodeb_Pre_Feature_path = Enodeb_Pre_Feature_path,  
                                     enodeb_date = enodeb_date,  
                                     enodeb_path = enodeb_path) 
-
         output_path = f"{hdfs_title}/user/ZheS/MonitorEnodebPef/Carrier/Event_Enodeb_Post_tickets_Feature_Date/{date_str}_tickets_Post_Feature_of_Enodeb/{date_str}_tickets_Post_feature_maintained_{enodeb_date}.csv" 
-
         snap_post_instance.result_df.repartition(1).write.csv(output_path, header=True, mode="overwrite") 
-
     date_strs = [ (date.today() - timedelta(days= i) ).strftime("%Y-%m-%d") for i in range(1,20) ]
     
     for date_str in date_strs:
         previous_14_days = [(datetime.strptime(date_str, "%Y-%m-%d") - timedelta(days=day)).strftime("%Y-%m-%d") for day in range(14)]  
-
         with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor: 
-
             executor.map(lambda enodeb_date: sector_post( date_str, enodeb_date), previous_14_days) 
         
         with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor: 
-
             executor.map(lambda enodeb_date: carrier_post( date_str, enodeb_date), previous_14_days) 

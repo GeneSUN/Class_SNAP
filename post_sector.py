@@ -43,7 +43,7 @@ if __name__ == "__main__":
 
 #----------------------------------------------------------------------------------------------------------------------------
     spark = SparkSession.builder\
-            .appName('MonitorEnodebPef_Enodeb_level')\
+            .appName('MonitorEnodebPef_Sector_Post')\
             .master("spark://njbbepapa1.nss.vzwnet.com:7077") \
             .config("spark.sql.adapative.enabled","true")\
             .enableHiveSupport().getOrCreate()
@@ -63,6 +63,7 @@ if __name__ == "__main__":
     previous_14_days = [(datetime.strptime(date_str, "%Y-%m-%d") - timedelta(days=day)).strftime("%Y-%m-%d") for day in range(14)]  
 
     import concurrent
+    from concurrent import futures
     with concurrent.futures.ThreadPoolExecutor() as executor: 
         executor.map(lambda enodeb_date: post_sector(spark,
                                                      date_str,

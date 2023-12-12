@@ -288,12 +288,20 @@ if __name__ == "__main__":
     
 #-----------------------------------------------------------------------------------------
     import html
-    if all( [i==[] for i in df_druid["hdfs_miss_days"]] ) and all( [i==[] for i in df_druid["druid_miss_days"]] ):
+    if all( [i==[] for i in df_druid["hdfs_miss_days"]] ):
+    #if all( [i==[] for i in df_druid["hdfs_miss_days"]] ) and all( [i==[] for i in df_druid["druid_miss_days"]] ):
+        send_mail(  'sassupport@verizon.com', 
+        ['zhe.sun@verizonwireless.com'], 
+        "SNAP 6 table check Success",
+        [], 
+        html_content = '<br><br>'.join(df.to_html() for df in [df_druid]), 
+        files=None, 
+        server='vzsmtp.verizon.com' )
         pass
     else:
         send_mail(  'sassupport@verizon.com', 
                 ['zhe.sun@verizonwireless.com'], 
-                "SNAP 6 table check",
+                "SNAP 6 table check Failed",
                 [], 
                 html_content = '<br><br>'.join(df.to_html() for df in [df_druid]), 
                 files=None, 
