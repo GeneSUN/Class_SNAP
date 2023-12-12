@@ -5,8 +5,8 @@ export SPARK_HOME=/usr/apps/vmas/spark-3.2.0-bin-hadoop3.2
 export PYSPARK_PYTHON=/usr/apps/vmas/anaconda3/bin/python3 
 
 # Define the date range 
-start_date="2023-11-12" 
-end_date="2023-12-10" 
+start_date="2023-12-10" 
+end_date="2023-12-11" 
  
 echo "RES: Starting===" 
 echo $(date) 

@@ -779,7 +779,7 @@ class SNAP_post_carrier(SNAP_post):
             id_column = self.id_column
         
         oracle_file = f"hdfs://njbbepapa1.nss.vzwnet.com:9000/fwa/atoll_oracle_daily/date={date_str}"
-
+        
         if id_column == ['ENODEB','EUTRANCELL','CARRIER']:
             df_add = self.spark.read.option("header","true").csv(oracle_file)\
                             .select( 
