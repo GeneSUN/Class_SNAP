@@ -72,6 +72,6 @@ if __name__ == "__main__":
                                                      enodeb_path), 
                                                                     previous_14_days) 
     try:
-        post_sector(spark,date_str,id_column, xlap_sector_path, Sector_Pre_Feature_path, previous_14_days[-1],enodeb_path).show()
+        post_sector(spark,date_str,id_column, xlap_sector_path, Sector_Pre_Feature_path, previous_14_days[-1],enodeb_path)
     except:
-        post_sector(spark,date_str,id_column, xlap_sector_path, Sector_Pre_Feature_path, previous_14_days[-3],enodeb_path).show()
+        post_sector(spark,date_str,id_column, xlap_sector_path, Sector_Pre_Feature_path, previous_14_days[-3],enodeb_path)
