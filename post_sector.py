@@ -47,9 +47,10 @@ if __name__ == "__main__":
             .master("spark://njbbepapa1.nss.vzwnet.com:7077") \
             .config("spark.sql.adapative.enabled","true")\
             .enableHiveSupport().getOrCreate()
-    parser = argparse.ArgumentParser(description="Inputs for generating Post SNA Maintenance Script Trial")
-    
-    date_str = (date.today() - timedelta(1) ).strftime("%Y-%m-%d")
+    parser = argparse.ArgumentParser(description="Inputs") 
+    parser.add_argument("--date", default=(date.today() - timedelta(1) ).strftime("%Y-%m-%d")) 
+    args = parser.parse_args()
+    date_str = args.date
     #date_str = "2023-12-02"
     id_column = ['ENODEB', 'EUTRANCELL']
 

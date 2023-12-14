@@ -210,7 +210,8 @@ if __name__ == "__main__":
     }
     time_range = 20
     time_window = time_range
-    query_template = f"""SELECT DISTINCT SUBSTR(CAST(__time AS VARCHAR), 1, 10) as existed_date FROM key_name  ORDER BY existed_date desc limit {time_window}""" 
+    #query_template = f"""SELECT DISTINCT SUBSTR(CAST(__time AS VARCHAR), 1, 10) as existed_date FROM key_name  ORDER BY existed_date desc limit {time_window}""" 
+    query_template = f"""SELECT DISTINCT "day" as existed_date FROM key_name  ORDER BY existed_date desc limit {time_window}""" 
 
     miss_date_payload = {} 
 

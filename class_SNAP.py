@@ -770,7 +770,10 @@ class SNAP_post_carrier(SNAP_post):
         self.result_df = self.patch2( self.patch1( self.join_df() ) )
     
     def patch2(self,result_df):
-        return result_df.filter( col("EUTRANCELL") != '0' ).dropDuplicates()
+        result_df = result_df.fillna({"rtp_gap_change_rate": 0})\
+                             .filter( col("EUTRANCELL") != '0' )\
+                             .dropDuplicates()
+        return result_df
         
     def get_df_add(self, date_str = None, id_column = None):
         if date_str is None:
