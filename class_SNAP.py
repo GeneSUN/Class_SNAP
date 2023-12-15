@@ -454,18 +454,32 @@ class SNAP_post(SNAP):
     def get_enb_cord(self, date_str = None):
         if date_str is None:
             date_str = self.date_str
-        oracle_file = f"hdfs://njbbepapa1.nss.vzwnet.com:9000/fwa/atoll_oracle_daily/date={date_str}"
-        df_enb_cord = self.spark.read.format("com.databricks.spark.csv").option("header", "True").load(oracle_file)\
-                            .filter(F.col("LATITUDE_DEGREES_NAD83").isNotNull())\
-                            .filter(F.col("LONGITUDE_DEGREES_NAD83").isNotNull())\
-                            .filter(F.col("ENODEB_ID").isNotNull())\
-                            .groupby("ENODEB_ID","LATITUDE_DEGREES_NAD83","LONGITUDE_DEGREES_NAD83")\
-                            .count()\
-                            .select( col('ENODEB_ID').alias('ENODEB'), 
-                                    F.col('LATITUDE_DEGREES_NAD83').cast("double").alias('LATITUDE'), 
-                                    F.col('LONGITUDE_DEGREES_NAD83').cast("double").alias('LONGITUDE'))\
-                            .withColumn('ENODEB', lpad(col('ENODEB'), 6, '0'))\
-                            .dropDuplicates( ['ENODEB'] )
+        try:
+            oracle_file = f"hdfs://njbbepapa1.nss.vzwnet.com:9000/fwa/atoll_oracle_daily/date={date_str}"
+            df_enb_cord = self.spark.read.format("com.databricks.spark.csv").option("header", "True").load(oracle_file)\
+                                .filter(F.col("LATITUDE_DEGREES_NAD83").isNotNull())\
+                                .filter(F.col("LONGITUDE_DEGREES_NAD83").isNotNull())\
+                                .filter(F.col("ENODEB_ID").isNotNull())\
+                                .groupby("ENODEB_ID","LATITUDE_DEGREES_NAD83","LONGITUDE_DEGREES_NAD83")\
+                                .count()\
+                                .select( col('ENODEB_ID').alias('ENODEB'), 
+                                        F.col('LATITUDE_DEGREES_NAD83').cast("double").alias('LATITUDE'), 
+                                        F.col('LONGITUDE_DEGREES_NAD83').cast("double").alias('LONGITUDE'))\
+                                .withColumn('ENODEB', lpad(col('ENODEB'), 6, '0'))\
+                                .dropDuplicates( ['ENODEB'] )
+        except:
+            oracle_file = f"hdfs://njbbepapa1.nss.vzwnet.com:9000/fwa/atoll_oracle_daily/date=2023-11-15"
+            df_enb_cord = self.spark.read.format("com.databricks.spark.csv").option("header", "True").load(oracle_file)\
+                                .filter(F.col("LATITUDE_DEGREES_NAD83").isNotNull())\
+                                .filter(F.col("LONGITUDE_DEGREES_NAD83").isNotNull())\
+                                .filter(F.col("ENODEB_ID").isNotNull())\
+                                .groupby("ENODEB_ID","LATITUDE_DEGREES_NAD83","LONGITUDE_DEGREES_NAD83")\
+                                .count()\
+                                .select( col('ENODEB_ID').alias('ENODEB'), 
+                                        F.col('LATITUDE_DEGREES_NAD83').cast("double").alias('LATITUDE'), 
+                                        F.col('LONGITUDE_DEGREES_NAD83').cast("double").alias('LONGITUDE'))\
+                                .withColumn('ENODEB', lpad(col('ENODEB'), 6, '0'))\
+                                .dropDuplicates( ['ENODEB'] )
         return df_enb_cord
 
     def get_post_feature(self,  df_enodeb = None, df_xlap = None, id_column = None, df_xlap_pre_stas = None):
@@ -781,26 +795,48 @@ class SNAP_post_carrier(SNAP_post):
         if id_column is None:
             id_column = self.id_column
         
-        oracle_file = f"hdfs://njbbepapa1.nss.vzwnet.com:9000/fwa/atoll_oracle_daily/date={date_str}"
         
-        if id_column == ['ENODEB','EUTRANCELL','CARRIER']:
-            df_add = self.spark.read.option("header","true").csv(oracle_file)\
+        try:
+            oracle_file = f"hdfs://njbbepapa1.nss.vzwnet.com:9000/fwa/atoll_oracle_daily/date={date_str}"
+            
+            if id_column == ['ENODEB','EUTRANCELL','CARRIER']:
+                df_add = self.spark.read.option("header","true").csv(oracle_file)\
+                                .select( 
+                                            col('ENODEB_ID').alias(id_column[0]), 
+                                            col('SECTOR').alias(id_column[1]),
+                                            col('CARRIER_NUMBER').alias(id_column[2]),
+                                            col('AZIMUTH_DEG')
+                                        )\
+                                .withColumn('ENODEB', lpad(col('ENODEB'), 6, '0'))
+            elif id_column == ['ENODEB','EUTRANCELL']:
+                df_add = self.spark.read.option("header","true").csv(oracle_file)\
                             .select( 
                                         col('ENODEB_ID').alias(id_column[0]), 
                                         col('SECTOR').alias(id_column[1]),
-                                        col('CARRIER_NUMBER').alias(id_column[2]),
                                         col('AZIMUTH_DEG')
                                     )\
                             .withColumn('ENODEB', lpad(col('ENODEB'), 6, '0'))
-        elif id_column == ['ENODEB','EUTRANCELL']:
-            df_add = self.spark.read.option("header","true").csv(oracle_file)\
-                        .select( 
-                                    col('ENODEB_ID').alias(id_column[0]), 
-                                    col('SECTOR').alias(id_column[1]),
-                                    col('AZIMUTH_DEG')
-                                )\
-                        .withColumn('ENODEB', lpad(col('ENODEB'), 6, '0'))
-        return df_add
+            return df_add
+        except:
+            oracle_file = f"hdfs://njbbepapa1.nss.vzwnet.com:9000/fwa/atoll_oracle_daily/date=2023-11-15"
+            if id_column == ['ENODEB','EUTRANCELL','CARRIER']:
+                df_add = self.spark.read.option("header","true").csv(oracle_file)\
+                                .select( 
+                                            col('ENODEB_ID').alias(id_column[0]), 
+                                            col('SECTOR').alias(id_column[1]),
+                                            col('CARRIER_NUMBER').alias(id_column[2]),
+                                            col('AZIMUTH_DEG')
+                                        )\
+                                .withColumn('ENODEB', lpad(col('ENODEB'), 6, '0'))
+            elif id_column == ['ENODEB','EUTRANCELL']:
+                df_add = self.spark.read.option("header","true").csv(oracle_file)\
+                            .select( 
+                                        col('ENODEB_ID').alias(id_column[0]), 
+                                        col('SECTOR').alias(id_column[1]),
+                                        col('AZIMUTH_DEG')
+                                    )\
+                            .withColumn('ENODEB', lpad(col('ENODEB'), 6, '0'))
+            return df_add
         
     def join_df(self, df_add = None, df_pre_post = None, id_column = None):
         if df_add is None:

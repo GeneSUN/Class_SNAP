@@ -73,4 +73,4 @@ if __name__ == "__main__":
                                                      enodeb_path), 
                                                                     previous_14_days) 
 
-    #post_carrier(spark,date_str,id_column, xlap_carrier_path, Carrier_Pre_Feature_path, previous_14_days[-1],enodeb_path)
+    post_carrier(spark,date_str,id_column, xlap_carrier_path, Carrier_Pre_Feature_path, previous_14_days[-1],enodeb_path)
