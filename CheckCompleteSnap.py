@@ -162,7 +162,7 @@ class ClassDailyCheckDruid(ClassDailyCheckHdfs):
         missing_dates = [date for date in target_date_list if date not in exist_date_list ]
 
         
-        if task_name[:9] == 'snap_data':
+        if task_name[:13] == 'snap_data_pre':
             date_objects = [datetime.strptime(date, "%Y-%m-%d") for date in missing_dates] 
             filtered_dates = [date.strftime("%Y-%m-%d") for date in date_objects if date.weekday() < 5] 
             filtered_dates = [d for d in filtered_dates if d not in neglect_days ]
