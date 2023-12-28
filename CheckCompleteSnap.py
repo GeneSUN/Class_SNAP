@@ -25,7 +25,7 @@ import re
 
 class ClassDailyCheckBase:
     global neglect_days
-    neglect_days = ["2023-11-23", "2023-11-24","2023-11-27", "2023-12-25", "2023-11-14"]
+    neglect_days = ["2023-11-23", "2023-11-24","2023-11-27", "2023-12-25","2023-12-26", "2023-11-14"]
     def __init__(self, name, expect_delay):
         self.name = name
         self.expect_delay = expect_delay
