@@ -8,7 +8,7 @@ import argparse
 import requests 
 import pandas as pd 
 import json
-import psycopg2
+#import psycopg2
 
 import smtplib
 from email.mime.text import MIMEText
@@ -25,7 +25,7 @@ import re
 
 class ClassDailyCheckBase:
     global neglect_days
-    neglect_days = ["2023-11-23", "2023-11-24","2023-11-27", "2023-12-25","2023-12-26", "2023-11-14"]
+    neglect_days = ["2023-11-23", "2023-11-24","2023-11-27", "2023-12-25", "2023-11-14"]
     def __init__(self, name, expect_delay):
         self.name = name
         self.expect_delay = expect_delay
@@ -162,7 +162,7 @@ class ClassDailyCheckDruid(ClassDailyCheckHdfs):
         missing_dates = [date for date in target_date_list if date not in exist_date_list ]
 
         
-        if task_name[:13] == 'snap_data_pre':
+        if task_name[:9] == 'snap_data':
             date_objects = [datetime.strptime(date, "%Y-%m-%d") for date in missing_dates] 
             filtered_dates = [date.strftime("%Y-%m-%d") for date in date_objects if date.weekday() < 5] 
             filtered_dates = [d for d in filtered_dates if d not in neglect_days ]
@@ -210,8 +210,7 @@ if __name__ == "__main__":
     }
     time_range = 20
     time_window = time_range
-    #query_template = f"""SELECT DISTINCT SUBSTR(CAST(__time AS VARCHAR), 1, 10) as existed_date FROM key_name  ORDER BY existed_date desc limit {time_window}""" 
-    query_template = f"""SELECT DISTINCT "day" as existed_date FROM key_name  ORDER BY existed_date desc limit {time_window}""" 
+    query_template = f"""SELECT DISTINCT SUBSTR(CAST(__time AS VARCHAR), 1, 10) as existed_date FROM key_name  ORDER BY existed_date desc limit {time_window}""" 
 
     miss_date_payload = {} 
 
