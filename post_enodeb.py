@@ -60,7 +60,7 @@ if __name__ == "__main__":
     Enodeb_Pre_Feature_path = hdfs_title + "/user/ZheS/MonitorEnodebPef/enodeb/Event_Enodeb_Pre_Feature_Date/Event_Enodeb_Pre_{}.csv"
     enodeb_path = hdfs_title + "/user/ZheS/MonitorEnodebPef/enodeb/Event_Enodeb_List_Date/Event_Enodeb_List_{}.csv"
     
-    previous_14_days = [(datetime.strptime(date_str, "%Y-%m-%d") - timedelta(days=day)).strftime("%Y-%m-%d") for day in range(14)]  
+    previous_14_days = [(datetime.strptime(date_str, "%Y-%m-%d") - timedelta(days=day)).strftime("%Y-%m-%d") for day in range(15)]  
 
     import concurrent
     with concurrent.futures.ThreadPoolExecutor() as executor: 
@@ -72,4 +72,3 @@ if __name__ == "__main__":
                                                      enodeb_date, 
                                                      enodeb_path), 
                                                                     previous_14_days) 
-

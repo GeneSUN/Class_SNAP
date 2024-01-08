@@ -498,8 +498,6 @@ class SNAP_post(SNAP):
         
         df_post = self.fill_allday_zero_with_NA(df_post, sea_features, id_column)
         df_post = self.rename_features(df_post, sea_column_mapping)
-        
-        
 
         df_pre_post = self.calculate_metrics(df_post, df_xlap_pre_stas, id_column)
 
@@ -664,8 +662,6 @@ class SNAP_post_enodeb(SNAP_post):
                                         F.col("lng").cast("double"))
                                     
         df_tickets_agg =  df_tickets.groupby("trouble_id","status","create_date_nrb","lat","lng").count()
-        df_tickets_agg.cache()
-        df_tickets_agg.count()
         
         df_tickets_open =df_tickets_agg.filter(F.lower(F.col("status"))=="open")
         df_tickets_notopen =df_tickets_agg.filter(~(F.lower(F.col("status"))=="open"))
