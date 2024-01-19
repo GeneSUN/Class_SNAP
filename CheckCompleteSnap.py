@@ -1,4 +1,3 @@
-from pyspark.sql import SparkSession 
 import argparse 
 import requests 
 import pandas as pd 
@@ -8,7 +7,6 @@ import argparse
 import requests 
 import pandas as pd 
 import json
-import psycopg2
 
 import smtplib
 from email.mime.text import MIMEText
@@ -25,7 +23,7 @@ import re
 
 class ClassDailyCheckBase:
     global neglect_days
-    neglect_days = ["2023-11-23", "2023-11-24","2023-11-27", "2023-12-25","2023-12-26", "2023-11-14"]
+    neglect_days = ["2023-11-23", "2023-11-24","2023-11-27", "2023-12-25","2023-12-26", "2023-11-14","2024-01-01","2024-01-02","2024-01-15"]
     def __init__(self, name, expect_delay):
         self.name = name
         self.expect_delay = expect_delay
@@ -191,7 +189,7 @@ def send_mail(send_from, send_to, subject, cc,html_content, files=None, server='
 
 if __name__ == "__main__":
     # the only input is the date which is used to generate 'date_range'
-    spark = SparkSession.builder.appName('Daily SNA data availability checking').enableHiveSupport().getOrCreate()
+    #spark = SparkSession.builder.appName('Daily SNA data availability checking').enableHiveSupport().getOrCreate()
     parser = argparse.ArgumentParser(description="Inputs for generating Post SNA Maintenance Script Trial")
 
     payload = { 
@@ -210,8 +208,8 @@ if __name__ == "__main__":
     }
     time_range = 20
     time_window = time_range
-    #query_template = f"""SELECT DISTINCT SUBSTR(CAST(__time AS VARCHAR), 1, 10) as existed_date FROM key_name  ORDER BY existed_date desc limit {time_window}""" 
-    query_template = f"""SELECT DISTINCT "day" as existed_date FROM key_name  ORDER BY existed_date desc limit {time_window}""" 
+    query_template = f"""SELECT DISTINCT SUBSTR(CAST(__time AS VARCHAR), 1, 10) as existed_date FROM key_name  ORDER BY existed_date desc limit {time_window}""" 
+    #query_template = f"""SELECT DISTINCT "day" as existed_date FROM key_name  ORDER BY existed_date desc limit {time_window}""" 
 
     miss_date_payload = {} 
 
