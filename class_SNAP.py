@@ -662,6 +662,8 @@ class SNAP_post_enodeb(SNAP_post):
                                         F.col("lng").cast("double"))
                                     
         df_tickets_agg =  df_tickets.groupby("trouble_id","status","create_date_nrb","lat","lng").count()
+        df_tickets_agg.cache()
+        df_tickets_agg.count()
         
         df_tickets_open =df_tickets_agg.filter(F.lower(F.col("status"))=="open")
         df_tickets_notopen =df_tickets_agg.filter(~(F.lower(F.col("status"))=="open"))
