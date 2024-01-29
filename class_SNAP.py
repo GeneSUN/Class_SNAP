@@ -631,25 +631,27 @@ class SNAP_post_enodeb(SNAP_post):
         df_enb_list = df_enb_list.withColumn('event_date_final',lit(enodeb_date) )\
                                         .withColumnRenamed("ENODEB","enodeb_event")
         
-        window_recentTickets=Window().partitionBy("trouble_id","status").orderBy(F.desc("MODIFIED_DATE"),F.desc("create_date_nrb"),F.desc("NRB_ASSIGNED_DATE"),F.desc("lat"),F.desc("lng"))
+        window_recentTickets=Window().partitionBy("trouble_id","status").orderBy(F.desc("MODIFIED_DATE"),F.desc("create_date_nrb"),F.desc("lat"),F.desc("lng"))
         window_dist=Window().partitionBy("trouble_id","status").orderBy("distance_from_enb")
         
-        tickets_path='hdfs://njbbepapa1.nss.vzwnet.com:9000/user/kovvuve/epa_tickets/epa_tickets_{}-*.csv.gz'
+        tickets_path = hdfs_title + "/user/rohitkovvuri/nrb/prod_nrb_tickets.csv"
 
-        df_tickets = self.spark.read.option("header","true").option("delimiter", "|}{|")\
-                                .csv(tickets_path.format(date_str))\
+        df_tickets = self.spark.read.option("header", "true").csv(tickets_path)\
                             .dropDuplicates()\
                             .filter(F.col("lat").isNotNull())\
                             .filter(F.col("lng").isNotNull())\
-                            .filter( F.col("copy_group_assigned") == "NRB" )\
+                            .filter(
+                                        (
+                                            (col("PROBLEM_TYPE") == "Signal Issue Data-No Signal Where Previously Present") | (col("PROBLEM_TYPE") == "Signal Issue Voice-No Signal Where Previously Present")| (col("PROBLEM_TYPE") == "Broadband/National Access-Unable to Connect-All Services")| (col("PROBLEM_TYPE") == "Broadband/National Access-Performance-Slow Speeds")| (col("PROBLEM_TYPE") == "Call Quality-Audio-Dropped Call-All Calls")| (col("PROBLEM_TYPE") == "Signal Issue Data-No Signal With History Unknown")| (col("PROBLEM_TYPE") == "Broadband/National Access-Performance-Frequent Disconnects")| (col("PROBLEM_TYPE") == "Signal Issue Voice-No Signal With History Unknown")| (col("PROBLEM_TYPE") == "Cannot Originate Calls to Any Number")| (col("PROBLEM_TYPE") == "Voicemail-VZW Voicemail")| (col("PROBLEM_TYPE") == "SMS-Cannot Receive: At All")| (col("PROBLEM_TYPE") == "Call Quality-Audio-Poor Audio")| (col("PROBLEM_TYPE") == "Call Quality-Audio-Dropped Call-Isolated Calls")| (col("PROBLEM_TYPE") == "Cannot Receive Calls-Cannot Receive Any Calls")| (col("PROBLEM_TYPE") == "SMS-Cannot Originate: At All")| (col("PROBLEM_TYPE") == "Call Quality-Audio-Dead Air")| (col("PROBLEM_TYPE") == "Broadband/National Access-Performance-Dormancy")| (col("PROBLEM_TYPE") == "MMS-Cannot Originate: At All")| (col("PROBLEM_TYPE") == "Call Quality-Audio-One Way")| (col("PROBLEM_TYPE") == "Video Calling-Cannot Receive-Any")| (col("PROBLEM_TYPE") == "Cannot Originate Calls  to Any Number")
+                                        ) |
+                                        (
+                                            F.col("copy_group_assigned") == "NRB"
+                                        )
+                                    )\
                             .withColumnRenamed("COPY_OF_STATUS", "status")\
-                            .withColumn("unix_date_mdified",
-                                        F.from_unixtime("modified_unix_time",
-                                        "MM-dd-yyyy"))\
-                            .select( 'trouble_id', 'status', 
-                                    F.to_date('NRB_ASSIGNED_DATE').alias("NRB_ASSIGNED_DATE"), 
-                                    F.to_date('create_date').alias("create_date_nrb"), 
-                                    F.to_date('MODIFIED_DATE').alias("MODIFIED_DATE"), 'lat', 'lng')\
+                                .select( 'trouble_id', 'status', 
+                                                            F.to_date('create_date_nrb').alias("create_date_nrb"), 
+                                                            F.to_date('MODIFIED_DATE').alias("MODIFIED_DATE"), 'lat', 'lng')\
                             .dropDuplicates()\
                             .withColumn("recent_tickets_row",F.row_number().over(window_recentTickets))\
                             .filter(F.col("recent_tickets_row")==1)\
@@ -666,16 +668,16 @@ class SNAP_post_enodeb(SNAP_post):
         df_tickets_agg.count()
         
         df_tickets_open =df_tickets_agg.filter(F.lower(F.col("status"))=="open")
-        df_tickets_notopen =df_tickets_agg.filter(~(F.lower(F.col("status"))=="open"))
+        df_tickets_closed =df_tickets_agg.filter((F.lower(F.col("status"))=="closed"))
         
-        df_tickets_2 = df_tickets_open.join(df_tickets_notopen,
-                                            df_tickets_notopen.trouble_id == df_tickets_open.trouble_id,
+        df_tickets_still_open = df_tickets_open.join(df_tickets_closed,
+                                            "trouble_id",
                                             "left_anti")\
                                     .select(df_tickets_open['*'])\
                                     .filter(F.col("lat").isNotNull() & F.col("lng").isNotNull())
         df_enb_comb =df_enb_cord.join(broadcast(df_enb_list),
                                         F.lpad(df_enb_list.enodeb_event,6,'0') ==F.lpad(df_enb_cord.ENODEB,6,'0'),"right")
-        df_enb_comb = df_tickets_2.crossJoin(broadcast(df_enb_comb))\
+        df_enb_comb = df_tickets_still_open.crossJoin(broadcast(df_enb_comb))\
                                 .withColumn("includeTicket",
                                             F.when(F.col("create_date_nrb")>=F.to_date("event_date_final"),
                                             F.lit("Y")).otherwise(F.lit("N")))\
@@ -691,22 +693,19 @@ class SNAP_post_enodeb(SNAP_post):
                             .withColumn("trouble_id_row",F.row_number().over(window_dist))\
                             .filter(F.col("trouble_id_row")==1)\
                             .filter(F.lower(F.col("status"))=="open")\
-                            .withColumn("po_box_address",F.lit(0))\
                             .withColumn("ticket_source",F.lit("nrb"))\
                             .select("enodeb_event",
                                     F.col("LATITUDE").alias("enb_lat"),
                                     F.col("LONGITUDE").alias('enb_lng'),
                                     "trouble_id","event_date_final",
                                     F.col("create_date_nrb").alias("create_date"),
-                                    "po_box_address","ticket_source")\
+                                    "ticket_source")\
                             .sort("enodeb_event","event_date_final","create_date")
-                            
+        df_enb_comb_dist.filter(col("enodeb_event") == "087008").orderBy("trouble_id").show()
         df_enb_tickets = df_enb_comb_dist.groupby("enodeb_event")\
                                         .agg(F.count("trouble_id").alias('nrb_ticket_counts'))\
                                         .select(F.col('enodeb_event').alias("ENODEB"), 
                                                 F.col('nrb_ticket_counts') )
-                                        
-
         return df_enb_tickets
     
     def get_enodeb_tickets_w360(self, df_enb_list = None, date_start = None, enodeb_date=None):
