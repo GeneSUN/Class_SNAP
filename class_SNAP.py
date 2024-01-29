@@ -468,7 +468,7 @@ class SNAP_post(SNAP):
                                 .withColumn('ENODEB', lpad(col('ENODEB'), 6, '0'))\
                                 .dropDuplicates( ['ENODEB'] )
         except:
-            oracle_file = f"hdfs://njbbepapa1.nss.vzwnet.com:9000/fwa/atoll_oracle_daily/date=2023-11-15"
+            oracle_file = f"hdfs://njbbepapa1.nss.vzwnet.com:9000/fwa/atoll_oracle/atoll.csv"
             df_enb_cord = self.spark.read.format("com.databricks.spark.csv").option("header", "True").load(oracle_file)\
                                 .filter(F.col("LATITUDE_DEGREES_NAD83").isNotNull())\
                                 .filter(F.col("LONGITUDE_DEGREES_NAD83").isNotNull())\
@@ -815,7 +815,7 @@ class SNAP_post_carrier(SNAP_post):
                             .withColumn('ENODEB', lpad(col('ENODEB'), 6, '0'))
             return df_add
         except:
-            oracle_file = f"hdfs://njbbepapa1.nss.vzwnet.com:9000/fwa/atoll_oracle_daily/date=2023-11-15"
+            oracle_file = f"hdfs://njbbepapa1.nss.vzwnet.com:9000/fwa/atoll_oracle/atoll.csv"
             if id_column == ['ENODEB','EUTRANCELL','CARRIER']:
                 df_add = self.spark.read.option("header","true").csv(oracle_file)\
                                 .select( 
