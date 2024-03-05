@@ -652,6 +652,7 @@ class SNAP_post_enodeb(SNAP_post):
                                 .select( 'trouble_id', 'status', 
                                                             F.to_date('create_date_nrb').alias("create_date_nrb"), 
                                                             F.to_date('MODIFIED_DATE').alias("MODIFIED_DATE"), 'lat', 'lng')\
+                            .filter( col("create_date_nrb") <= date_str )\
                             .dropDuplicates()\
                             .withColumn("recent_tickets_row",F.row_number().over(window_recentTickets))\
                             .filter(F.col("recent_tickets_row")==1)\
