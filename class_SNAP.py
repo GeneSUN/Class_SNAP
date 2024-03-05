@@ -633,10 +633,10 @@ class SNAP_post_enodeb(SNAP_post):
         
         window_recentTickets=Window().partitionBy("trouble_id","status").orderBy(F.desc("MODIFIED_DATE"),F.desc("create_date_nrb"),F.desc("lat"),F.desc("lng"))
         window_dist=Window().partitionBy("trouble_id","status").orderBy("distance_from_enb")
-        
-        tickets_path = hdfs_title + "/user/rohitkovvuri/nrb/prod_nrb_tickets.csv"
 
-        df_tickets = self.spark.read.option("header", "true").csv(tickets_path)\
+        try:
+            tickets_path = hdfs_title + "/user/rohitkovvuri/nrb/prod_nrb_tickets.csv"
+            df_tickets = self.spark.read.option("header", "true").csv(tickets_path)\
                             .dropDuplicates()\
                             .filter(F.col("lat").isNotNull())\
                             .filter(F.col("lng").isNotNull())\
@@ -651,6 +651,7 @@ class SNAP_post_enodeb(SNAP_post):
                             .withColumnRenamed("COPY_OF_STATUS", "status")\
                                 .select( 'trouble_id', 'status', 
                                                             F.to_date('create_date_nrb').alias("create_date_nrb"), 
+
                                                             F.to_date('MODIFIED_DATE').alias("MODIFIED_DATE"), 'lat', 'lng')\
                             .filter( col("create_date_nrb") <= date_str )\
                             .dropDuplicates()\
@@ -662,8 +663,45 @@ class SNAP_post_enodeb(SNAP_post):
                             .withColumn("id_lng",(F.col("lng")*F.lit(1.0)).cast("int"))\
                             .select("trouble_id","status","create_date_nrb",
                                         F.col("lat").cast("double"),
-                                        F.col("lng").cast("double"))
-                                    
+                                        F.col("lng").cast("double"))                                        
+
+        except Exception as e:
+            tickets_path='hdfs://njbbepapa1.nss.vzwnet.com:9000/user/kovvuve/epa_tickets/epa_tickets_{}-*.csv.gz'.format(date_str)
+            print(tickets_path)
+
+            df_tickets = self.spark.read.option("header", "true").option("delimiter", "|}{|").csv(tickets_path)\
+                                .dropDuplicates()\
+                                .filter(F.col("lat").isNotNull())\
+                                .filter(F.col("lng").isNotNull())\
+                                .filter(
+                                            (
+                                                (col("PROBLEM_TYPE") == "Signal Issue Data-No Signal Where Previously Present") | (col("PROBLEM_TYPE") == "Signal Issue Voice-No Signal Where Previously Present")| (col("PROBLEM_TYPE") == "Broadband/National Access-Unable to Connect-All Services")| (col("PROBLEM_TYPE") == "Broadband/National Access-Performance-Slow Speeds")| (col("PROBLEM_TYPE") == "Call Quality-Audio-Dropped Call-All Calls")| (col("PROBLEM_TYPE") == "Signal Issue Data-No Signal With History Unknown")| (col("PROBLEM_TYPE") == "Broadband/National Access-Performance-Frequent Disconnects")| (col("PROBLEM_TYPE") == "Signal Issue Voice-No Signal With History Unknown")| (col("PROBLEM_TYPE") == "Cannot Originate Calls to Any Number")| (col("PROBLEM_TYPE") == "Voicemail-VZW Voicemail")| (col("PROBLEM_TYPE") == "SMS-Cannot Receive: At All")| (col("PROBLEM_TYPE") == "Call Quality-Audio-Poor Audio")| (col("PROBLEM_TYPE") == "Call Quality-Audio-Dropped Call-Isolated Calls")| (col("PROBLEM_TYPE") == "Cannot Receive Calls-Cannot Receive Any Calls")| (col("PROBLEM_TYPE") == "SMS-Cannot Originate: At All")| (col("PROBLEM_TYPE") == "Call Quality-Audio-Dead Air")| (col("PROBLEM_TYPE") == "Broadband/National Access-Performance-Dormancy")| (col("PROBLEM_TYPE") == "MMS-Cannot Originate: At All")| (col("PROBLEM_TYPE") == "Call Quality-Audio-One Way")| (col("PROBLEM_TYPE") == "Video Calling-Cannot Receive-Any")| (col("PROBLEM_TYPE") == "Cannot Originate Calls  to Any Number")
+                                            ) |
+                                            (
+                                                F.col("copy_group_assigned") == "NRB"
+                                            )
+                                        )\
+                                .withColumnRenamed("COPY_OF_STATUS", "status")\
+                                .withColumn("unix_date_mdified",
+                                            F.from_unixtime("modified_unix_time",
+                                            "MM-dd-yyyy"))\
+                                .select( 'trouble_id', 'status', 
+                                            F.to_date('NRB_ASSIGNED_DATE').alias("NRB_ASSIGNED_DATE"), 
+                                            F.to_date('create_date').alias("create_date_nrb"), 
+                                            F.to_date('MODIFIED_DATE').alias("MODIFIED_DATE"), 'lat', 'lng')\
+                                .filter( col("create_date_nrb") <= date_str )\
+                                .dropDuplicates()\
+                                .withColumn("recent_tickets_row",F.row_number().over(window_recentTickets))\
+                                .filter(F.col("recent_tickets_row")==1)\
+                                .withColumn("id_lat",F.col("lat").cast("double"))\
+                                .withColumn("id_lng",F.col("lng").cast("double"))\
+                                .withColumn("id_lat",(F.col("lat")*F.lit(1.0)).cast("int"))\
+                                .withColumn("id_lng",(F.col("lng")*F.lit(1.0)).cast("int"))\
+                                .select("trouble_id","status","create_date_nrb",
+                                            F.col("lat").cast("double"),
+                                            F.col("lng").cast("double"))
+        
+        
         df_tickets_agg =  df_tickets.groupby("trouble_id","status","create_date_nrb","lat","lng").count()
         df_tickets_agg.cache()
         df_tickets_agg.count()
@@ -707,8 +745,8 @@ class SNAP_post_enodeb(SNAP_post):
                                         .agg(F.count("trouble_id").alias('nrb_ticket_counts'))\
                                         .select(F.col('enodeb_event').alias("ENODEB"), 
                                                 F.col('nrb_ticket_counts') )
+
         return df_enb_tickets
-    
     def get_enodeb_tickets_w360(self, df_enb_list = None, date_start = None, enodeb_date=None):
         if df_enb_list is None:
             df_enb_list = self.df_enodeb
