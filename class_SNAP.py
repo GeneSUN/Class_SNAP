@@ -171,7 +171,10 @@ class SNAP():
         
         df = df.filter(~(F.col("ENODEB") == "*"))\
                 .filter(F.col("ENODEB").isNotNull())\
-                .withColumn('ENODEB', lpad(col('ENODEB'), 6, '0'))\
+                .withColumn('ENODEB', F.when( 
+                                            F.length(F.col("ENODEB")) < 6, 
+                                            F.lpad(F.col("ENODEB"), 6, '0') 
+                                        ).otherwise(F.col("ENODEB")) )\
                 .withColumn("DAY", F.to_date(F.col("DAY"), "MM/dd/yyyy"))\
                 .withColumn("DAY", F.date_format(F.col("DAY"), "yyyy-MM-dd"))\
                 .select([F.col(column).cast('double') if column in Strings_to_Numericals else F.col(column) for column in df.columns])\
@@ -465,7 +468,10 @@ class SNAP_post(SNAP):
                                 .select( col('ENODEB_ID').alias('ENODEB'), 
                                         F.col('LATITUDE_DEGREES_NAD83').cast("double").alias('LATITUDE'), 
                                         F.col('LONGITUDE_DEGREES_NAD83').cast("double").alias('LONGITUDE'))\
-                                .withColumn('ENODEB', lpad(col('ENODEB'), 6, '0'))\
+                                .withColumn('ENODEB', F.when( 
+                                                                F.length(F.col("ENODEB")) < 6, 
+                                                                F.lpad(F.col("ENODEB"), 6, '0') 
+                                                            ).otherwise(F.col("ENODEB")) )\
                                 .dropDuplicates( ['ENODEB'] )
         except:
             oracle_file = f"hdfs://njbbepapa1.nss.vzwnet.com:9000/fwa/atoll_oracle/atoll.csv"
@@ -478,7 +484,10 @@ class SNAP_post(SNAP):
                                 .select( col('ENODEB_ID').alias('ENODEB'), 
                                         F.col('LATITUDE_DEGREES_NAD83').cast("double").alias('LATITUDE'), 
                                         F.col('LONGITUDE_DEGREES_NAD83').cast("double").alias('LONGITUDE'))\
-                                .withColumn('ENODEB', lpad(col('ENODEB'), 6, '0'))\
+                                .withColumn('ENODEB', F.when( 
+                                                                F.length(F.col("ENODEB")) < 6, 
+                                                                F.lpad(F.col("ENODEB"), 6, '0') 
+                                                            ).otherwise(F.col("ENODEB")) )\
                                 .dropDuplicates( ['ENODEB'] )
         return df_enb_cord
 
@@ -856,7 +865,11 @@ class SNAP_post_carrier(SNAP_post):
                                             col('CARRIER_NUMBER').alias(id_column[2]),
                                             col('AZIMUTH_DEG')
                                         )\
-                                .withColumn('ENODEB', lpad(col('ENODEB'), 6, '0'))
+                                .withColumn('ENODEB', F.when( 
+                                                                F.length(F.col("ENODEB")) < 6, 
+                                                                F.lpad(F.col("ENODEB"), 6, '0') 
+                                                            ).otherwise(F.col("ENODEB")) )\
+                                .dropDuplicates()
             elif id_column == ['ENODEB','EUTRANCELL']:
                 df_add = self.spark.read.option("header","true").csv(oracle_file)\
                             .select( 
@@ -864,7 +877,11 @@ class SNAP_post_carrier(SNAP_post):
                                         col('SECTOR').alias(id_column[1]),
                                         col('AZIMUTH_DEG')
                                     )\
-                            .withColumn('ENODEB', lpad(col('ENODEB'), 6, '0'))
+                            .withColumn('ENODEB', F.when( 
+                                                            F.length(F.col("ENODEB")) < 6, 
+                                                            F.lpad(F.col("ENODEB"), 6, '0') 
+                                                        ).otherwise(F.col("ENODEB")) )\
+                            .dropDuplicates()
             return df_add
         except:
             oracle_file = f"hdfs://njbbepapa1.nss.vzwnet.com:9000/fwa/atoll_oracle/atoll.csv"
@@ -876,7 +893,11 @@ class SNAP_post_carrier(SNAP_post):
                                             col('CARRIER_NUMBER').alias(id_column[2]),
                                             col('AZIMUTH_DEG')
                                         )\
-                                .withColumn('ENODEB', lpad(col('ENODEB'), 6, '0'))
+                                .withColumn('ENODEB', F.when( 
+                                                                F.length(F.col("ENODEB")) < 6, 
+                                                                F.lpad(F.col("ENODEB"), 6, '0') 
+                                                            ).otherwise(F.col("ENODEB")) )\
+                                .dropDuplicates()
             elif id_column == ['ENODEB','EUTRANCELL']:
                 df_add = self.spark.read.option("header","true").csv(oracle_file)\
                             .select( 
@@ -884,7 +905,11 @@ class SNAP_post_carrier(SNAP_post):
                                         col('SECTOR').alias(id_column[1]),
                                         col('AZIMUTH_DEG')
                                     )\
-                            .withColumn('ENODEB', lpad(col('ENODEB'), 6, '0'))
+                            .withColumn('ENODEB', F.when( 
+                                                            F.length(F.col("ENODEB")) < 6, 
+                                                            F.lpad(F.col("ENODEB"), 6, '0') 
+                                                        ).otherwise(F.col("ENODEB")) )\
+                            .dropDuplicates()
             return df_add
         
     def join_df(self, df_add = None, df_pre_post = None, id_column = None):
