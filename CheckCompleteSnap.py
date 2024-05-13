@@ -204,7 +204,12 @@ if __name__ == "__main__":
 
         "snap_data_pre_carrier": {"query": """select SUBSTR(CAST(__time as VARCHAR),1,10) as current_date_val,count(*) as row_count  from snap_data_pre_carrier group by SUBSTR(CAST(__time as VARCHAR),1,10) ORDER BY current_date_val DESC limit 1"""}, 
 
-        "snap_data_post_carrier": {"query": """select SUBSTR(CAST(__time as VARCHAR),1,10) as current_date_val,count(*) as row_count from snap_data_post_carrier group by SUBSTR(CAST(__time as VARCHAR),1,10) ORDER BY current_date_val DESC limit 1"""}, 
+        "snap_data_post_carrier": {"query": """select SUBSTR(CAST(__time as VARCHAR),1,10) as current_date_val,count(*) as row_count from snap_data_post_carrier group by SUBSTR(CAST(__time as VARCHAR),1,10) ORDER BY current_date_val DESC limit 1"""},
+
+        "wifi_score_v2": {"query": """select SUBSTR(CAST(__time as VARCHAR),1,10) as current_date_val,count(*) as row_count from wifi_score_v2 group by SUBSTR(CAST(__time as VARCHAR),1,10) ORDER BY current_date_val DESC limit 1"""}, 
+    
+        "wifi_score_v3": {"query": """select SUBSTR(CAST(__time as VARCHAR),1,10) as current_date_val,count(*) as row_count from wifi_score_v3 group by SUBSTR(CAST(__time as VARCHAR),1,10) ORDER BY current_date_val DESC limit 1"""}, 
+
     }
     time_range = 20
     time_window = time_range
@@ -255,7 +260,19 @@ if __name__ == "__main__":
                     "hdfs_port": "9870", 
                     "hdfs_folder_path": '/user/ZheS/MonitorEnodebPef/Carrier/Event_Enodeb_Post_tickets_Feature_Date', 
                     "file_name_pattern": r'\d{4}-\d{2}-\d{2}' 
-                }
+                },
+                "wifi_score_v2": {
+                    "hdfs_host": 'njbbvmaspd11.nss.vzwnet.com', 
+                    "hdfs_port": "9870", 
+                    "hdfs_folder_path": '/user/ZheS/wifi_score_v2/homeScore_dataframe/', 
+                    "file_name_pattern": r'\d{4}-\d{2}-\d{2}'
+                },
+                "wifi_score_v3": {
+                    "hdfs_host": 'njbbvmaspd11.nss.vzwnet.com', 
+                    "hdfs_port": "9870", 
+                    "hdfs_folder_path": '/user/ZheS/wifi_score_v3/extenderScore_dataframe/', 
+                    "file_name_pattern": r'\d{4}-\d{2}-\d{2}'
+                },
         }
     
     expected_delay = {  
@@ -265,6 +282,8 @@ if __name__ == "__main__":
                     'snap_data_post_sector': '1', 
                     'snap_data_pre_carrier': '1', 
                     'snap_data_post_carrier': '1', 
+                    "wifi_score_v2":'1',
+                    "wifi_score_v3":'1',
                     }
 
 
@@ -287,16 +306,17 @@ if __name__ == "__main__":
     
 #-----------------------------------------------------------------------------------------
     import html
-    if all( [i==[] for i in df_druid["hdfs_miss_days"]] ):
+    if df_druid['druid_delayed_days'].eq(0).all(): 
+    #if all( [i==[] for i in df_druid["hdfs_miss_days"]] ):
     #if all( [i==[] for i in df_druid["hdfs_miss_days"]] ) and all( [i==[] for i in df_druid["druid_miss_days"]] ):
         send_mail(  'sassupport@verizon.com', 
-        ['zhe.sun@verizonwireless.com'], 
-        "SNAP 6 table check Success",
-        [], 
-        html_content = '<br><br>'.join(df.to_html() for df in [df_druid]), 
-        files=None, 
-        server='vzsmtp.verizon.com' )
-        pass
+                    ['zhe.sun@verizonwireless.com'], 
+                    "SNAP 6 table check Success",
+                    [], 
+                    html_content = '<br><br>'.join(df.to_html() for df in [df_druid]), 
+                    files=None, 
+                    server='vzsmtp.verizon.com' )
+        
     else:
         send_mail(  'sassupport@verizon.com', 
                 ['zhe.sun@verizonwireless.com'], 
@@ -305,3 +325,4 @@ if __name__ == "__main__":
                 html_content = '<br><br>'.join(df.to_html() for df in [df_druid]), 
                 files=None, 
                 server='vzsmtp.verizon.com' )
+        #"david.you@verizonwireless.com"
