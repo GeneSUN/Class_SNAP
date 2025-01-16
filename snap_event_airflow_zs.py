@@ -63,7 +63,7 @@ with DAG(
 
         druid_task = BashOperator( 
             task_id=d, 
-            bash_command = f"python {druid_hash[d]}", 
+            bash_command = f"python3 {druid_hash[d]}", 
             env={'VAR_RUN_ID': '{{ run_id }}', 'VAR_TRY_NUMBER': '{{ task_instance.try_number }}'},
             dag=dag, 
         )
