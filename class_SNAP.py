@@ -304,9 +304,13 @@ class SNAP_pre_enodeb(SNAP):
         #---------------------------------------------------------------------------------
         # step 2. filter row whose first samsung is not date_before_td
         window_spec = Window.partitionBy("ENODEB").orderBy("DAY")
-        df_event_first_samsung = remain_enodeb_df.withColumn( 
-            "first_positive_samsung_day", 
-            first(when(col("samsung") > 0, col("DAY")), ignorenulls=True).over(window_spec) 
+        from pyspark.sql.functions import isnan
+        df_event_first_samsung = remain_enodeb_df.withColumn(
+            "first_positive_samsung_day",
+            first(
+                when((~isnan(col("samsung"))) &(col("samsung").isNotNull()) & (col("samsung") > 0), col("DAY")),
+                ignorenulls=True
+            ).over(window_spec)
         )
             # explain
             #positive_samsung_day_column = when(col("samsung") > 0, col("DAY")).otherwise(None).alias("positive_samsung_day") 
