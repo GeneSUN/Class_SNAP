@@ -657,7 +657,7 @@ class SNAP_post_enodeb(SNAP_post):
             window_dist=Window().partitionBy("trouble_id","status").orderBy("distance_from_enb")
 
             try:
-                tickets_path = hdfs_title + "/user/rohitkovvuri/nrb/prod_nrb_tickets.csv"
+                tickets_path = hdfs_title + "/user/rohitkovvuri/nrb/prod_nrb_tickets_new.csv"
                 df_tickets = self.spark.read.option("header", "true").csv(tickets_path)\
                                 .dropDuplicates()\
                                 .filter(F.col("lat").isNotNull())\
