@@ -795,10 +795,16 @@ class SNAP_post_enodeb(SNAP_post):
                                             F.desc("event_end_date"),
                                             F.desc("lat_enb"),
                                             F.desc("lng_enb"))
-        
-        df_kpis_w360 = self.spark.read.option("header","true")\
-                        .csv("hdfs://njbbepapa1.nss.vzwnet.com:9000//fwa/workorder_oracle/DT={}".format(date_start))\
-                        .dropDuplicates().withColumn("data_date",F.lit(date_start))
+        try:
+            df_kpis_w360 = self.spark.read.option("header","true")\
+                            .csv("hdfs://njbbepapa1.nss.vzwnet.com:9000//fwa/workorder_oracle/DT={}".format(date_start))\
+                            .dropDuplicates().withColumn("data_date",F.lit(date_start))
+        except:
+            date_before = (datetime.strptime(date_start, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
+
+            df_kpis_w360 = self.spark.read.option("header","true")\
+                .csv("hdfs://njbbepapa1.nss.vzwnet.com:9000//fwa/workorder_oracle/DT={}".format(date_before))\
+                .dropDuplicates().withColumn("data_date",F.lit(date_start))
 
         for idate in range(1,daysBack):
             date_val = get_date_window(date_start,idate)[-1]
