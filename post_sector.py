@@ -54,8 +54,10 @@ if __name__ == "__main__":
     #date_str = "2023-12-02"
     id_column = ['ENODEB', 'EUTRANCELL']
 
+    hdfs_caro = "hdfs://carovmaspd1.nss.vzwnet.com:9000"
     hdfs_title = 'hdfs://njbbvmaspd11.nss.vzwnet.com:9000/'
-    xlap_sector_path = hdfs_title + '/user/rohitkovvuri/fsm_sector_kpis/fsmkpis_snap_sector_{}.csv'
+    #xlap_sector_path = hdfs_title + '/user/rohitkovvuri/fsm_sector_kpis/fsmkpis_snap_sector_{}.csv'
+    xlap_sector_path = hdfs_caro + "/SAS/snap/snap_4g/fsm_sector_kpis/fsmkpis_snap_sector_{}.csv"
     Sector_Pre_Feature_path = hdfs_title + "/user/ZheS/MonitorEnodebPef/Sector/Event_Enodeb_Pre_Feature_Date/Event_Enodeb_Pre_{}.csv"
     enodeb_path = hdfs_title + "/user/ZheS/MonitorEnodebPef/enodeb/Event_Enodeb_List_Date/Event_Enodeb_List_{}.csv"
     
