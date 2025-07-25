@@ -56,8 +56,10 @@ if __name__ == "__main__":
     args = parser.parse_args()
     date_str = args.date
 
+    hdfs_caro = "hdfs://carovmaspd1.nss.vzwnet.com:9000"
     hdfs_title = 'hdfs://njbbvmaspd11.nss.vzwnet.com:9000/'
-    sector_source = hdfs_title + "/user/rohitkovvuri/fsm_sector_kpis/fsmkpis_snap_sector_{}.csv"
+    sector_source = hdfs_caro + "/SAS/snap/snap_4g/fsm_sector_kpis/fsmkpis_snap_sector_{}.csv"
+    #sector_source = hdfs_title + "/user/rohitkovvuri/fsm_sector_kpis/fsmkpis_snap_sector_{}.csv"
     event_enodeb_path = hdfs_title+"/user/ZheS/MonitorEnodebPef/enodeb/Event_Enodeb_List_Date/Event_Enodeb_List_{}.csv"
     sector_path_list = ["/user/ZheS/MonitorEnodebPef/Sector/Daily_KPI_14_days_pre_Event/Daily_KPI_14_days_pre_{}.csv",
                 "/user/ZheS/MonitorEnodebPef/Sector/Event_Enodeb_Pre_Feature_Date/Event_Enodeb_Pre_{}.csv"]
