@@ -44,7 +44,7 @@ if __name__ == "__main__":
 #----------------------------------------------------------------------------------------------------------------------------
     spark = SparkSession.builder\
             .appName('MonitorEnodebPef_Carrier_Post')\
-            .master("spark://njbbepapa1.nss.vzwnet.com:7077") \
+            .config("spark.ui.port","24045")\
             .config("spark.sql.adapative.enabled","true")\
             .enableHiveSupport().getOrCreate()
     
@@ -55,8 +55,10 @@ if __name__ == "__main__":
 
     id_column = ['ENODEB', 'EUTRANCELL','CARRIER']
 
+    hdfs_caro = "hdfs://carovmaspd1.nss.vzwnet.com:9000"
     hdfs_title = 'hdfs://njbbvmaspd11.nss.vzwnet.com:9000/'
-    xlap_carrier_path = hdfs_title + '/user/rohitkovvuri/nokia_fsm_kpis_updated_v5/FSMKPIsSNAP_{}.csv'
+    #xlap_carrier_path = hdfs_title + '/user/rohitkovvuri/nokia_fsm_kpis_updated_v5/FSMKPIsSNAP_{}.csv'
+    xlap_carrier_path = hdfs_caro + "/SAS/snap/snap_4g/nokia_fsm_kpis_updated_v5/FSMKPIsSNAP_{}.csv"
     Carrier_Pre_Feature_path = hdfs_title + "/user/ZheS/MonitorEnodebPef/Carrier/Event_Enodeb_Pre_Feature_Date/Event_Enodeb_Pre_{}.csv"
     enodeb_path = hdfs_title + "/user/ZheS/MonitorEnodebPef/enodeb/Event_Enodeb_List_Date/Event_Enodeb_List_{}.csv"
     
