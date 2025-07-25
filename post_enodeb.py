@@ -44,7 +44,8 @@ if __name__ == "__main__":
 #----------------------------------------------------------------------------------------------------------------------------
     spark = SparkSession.builder\
             .appName('MonitorEnodebPef_Enodeb_Post')\
-            .master("spark://njbbepapa1.nss.vzwnet.com:7077") \
+            .master("spark://njbbepapa1.nss.vzwnet.com:7077")\
+            .config("spark.ui.port","24049")\
             .config("spark.sql.adapative.enabled","true")\
             .enableHiveSupport().getOrCreate()
     
@@ -56,7 +57,9 @@ if __name__ == "__main__":
     id_column = ['ENODEB']
 
     hdfs_title = 'hdfs://njbbvmaspd11.nss.vzwnet.com:9000/'
-    xlap_enodeb_path = hdfs_title + '/user/rohitkovvuri/nokia_fsm_kpis_updated_v3/NokiaFSMKPIsSNAP_{}.csv'
+    hdfs_caro = "hdfs://carovmaspd1.nss.vzwnet.com:9000"
+    xlap_enodeb_path = hdfs_caro + "//SAS/snap/snap_4g/nokia_fsm_kpis_updated_v3/NokiaFSMKPIsSNAP_{}.csv"
+    #xlap_enodeb_path = hdfs_title + '/user/rohitkovvuri/nokia_fsm_kpis_updated_v3/NokiaFSMKPIsSNAP_{}.csv'
     Enodeb_Pre_Feature_path = hdfs_title + "/user/ZheS/MonitorEnodebPef/enodeb/Event_Enodeb_Pre_Feature_Date/Event_Enodeb_Pre_{}.csv"
     enodeb_path = hdfs_title + "/user/ZheS/MonitorEnodebPef/enodeb/Event_Enodeb_List_Date/Event_Enodeb_List_{}.csv"
     
