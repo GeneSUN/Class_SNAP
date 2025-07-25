@@ -59,8 +59,10 @@ if __name__ == "__main__":
     mail_sender = MailSender() 
 
     try:
+        hdfs_caro = "hdfs://carovmaspd1.nss.vzwnet.com:9000"
         hdfs_title = 'hdfs://njbbvmaspd11.nss.vzwnet.com:9000/'
-        sourse_path = hdfs_title + "/user/rohitkovvuri/nokia_fsm_kpis_updated_v3/NokiaFSMKPIsSNAP_{}.csv"
+        #sourse_path = hdfs_title + "/user/rohitkovvuri/nokia_fsm_kpis_updated_v3/NokiaFSMKPIsSNAP_{}.csv"
+        sourse_path = hdfs_caro + "//SAS/snap/snap_4g/nokia_fsm_kpis_updated_v3/NokiaFSMKPIsSNAP_{}.csv"
         path_list = ["/user/ZheS/MonitorEnodebPef/enodeb/Event_Enodeb_List_Date/Event_Enodeb_List_{}.csv",
                     "/user/ZheS/MonitorEnodebPef/enodeb//Daily_KPI_14_days_pre_Event/Daily_KPI_14_days_pre_{}.csv",
                     "/user/ZheS/MonitorEnodebPef/enodeb/Event_Enodeb_Pre_Feature_Date/Event_Enodeb_Pre_{}.csv"]
