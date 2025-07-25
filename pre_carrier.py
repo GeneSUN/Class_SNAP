@@ -47,7 +47,7 @@ if __name__ == "__main__":
 #----------------------------------------------------------------------------------------------------------------------------
     spark = SparkSession.builder\
             .appName('MonitorEnodebPef_Carrier_Pre')\
-            .master("spark://njbbepapa1.nss.vzwnet.com:7077") \
+            .config("spark.ui.port","24041")\
             .config("spark.sql.adapative.enabled","true")\
             .enableHiveSupport().getOrCreate()
     
@@ -57,8 +57,9 @@ if __name__ == "__main__":
     date_str = args.date
 
     hdfs_title = 'hdfs://njbbvmaspd11.nss.vzwnet.com:9000/'
-    
-    carrier_source = hdfs_title + "/user/rohitkovvuri/nokia_fsm_kpis_updated_v5/FSMKPIsSNAP_{}.csv"
+    hdfs_caro = "hdfs://carovmaspd1.nss.vzwnet.com:9000"
+    #carrier_source = hdfs_title + "/user/rohitkovvuri/nokia_fsm_kpis_updated_v5/FSMKPIsSNAP_{}.csv"
+    carrier_source = hdfs_caro + "/SAS/snap/snap_4g/nokia_fsm_kpis_updated_v5/FSMKPIsSNAP_{}.csv"
     event_enodeb_path = hdfs_title+"/user/ZheS/MonitorEnodebPef/enodeb/Event_Enodeb_List_Date/Event_Enodeb_List_{}.csv"
 
     carrier_path_list = ["/user/ZheS/MonitorEnodebPef/Carrier/Daily_KPI_14_days_pre_Event/Daily_KPI_14_days_pre_{}.csv",
