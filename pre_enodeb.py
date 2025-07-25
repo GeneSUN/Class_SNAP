@@ -47,7 +47,7 @@ if __name__ == "__main__":
 #----------------------------------------------------------------------------------------------------------------------------
     spark = SparkSession.builder\
             .appName('MonitorEnodebPef_Enodeb_Pre')\
-            .master("spark://njbbepapa1.nss.vzwnet.com:7077") \
+            .config("spark.ui.port","24045")\
             .config("spark.sql.adapative.enabled","true")\
             .enableHiveSupport().getOrCreate()
     
