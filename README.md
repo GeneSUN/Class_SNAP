@@ -6,7 +6,7 @@ The full project documentation is hosted here:
 ## 1. Background & Objective
 As part of the nationwide transition of station towers from **Vendor A** to **Vendor B**, the goal of this project is to **monitor performance changes** before and after the vendor switch.  
 
-<img src="images/Vendor Transition.png" width="600" alt="Hierarchy Diagram">
+<img src="https://github.com/GeneSUN/tech_career/blob/main/Project/images/Vendor%20Transition.png" width="600" alt="Hierarchy Diagram">
 
 The system detects whether each tower experiences performance degradation following the transition.
 
