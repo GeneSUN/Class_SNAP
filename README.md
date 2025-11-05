@@ -1,7 +1,5 @@
 # EnodeB Performance Monitoring During Vendor Transition
 
-The full project documentation is hosted here:  
-👉 [View Detailed Documentation](https://github.com/GeneSUN/tech_career/blob/main/Project/EnodeB%20Performance%20Monitoring%20During%20Vendor%20Transition.md)
 
 ## 1. Background & Objective
 As part of the nationwide transition of station towers from **Vendor A** to **Vendor B**, the goal of this project is to **monitor performance changes** before and after the vendor switch.  
