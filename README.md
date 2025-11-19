@@ -1,10 +1,17 @@
-# EnodeB Performance Monitoring During Vendor Transition
+
+
+# Project Overview: EnodeB Performance Monitoring During Vendor Transition
+The full project documentation is hosted here:  
+👉 [View Detailed Documentation](https://github.com/GeneSUN/Class_SNAP)
+
+
 
 
 ## 1. Background & Objective
 As part of the nationwide transition of station towers from **Vendor A** to **Vendor B**, the goal of this project is to **monitor performance changes** before and after the vendor switch.  
 
-<img src="https://github.com/GeneSUN/tech_career/blob/main/Project/images/Vendor%20Transition.png" width="600" alt="Hierarchy Diagram">
+<img width="609" height="1180" alt="image" src="https://github.com/user-attachments/assets/dde34ec3-e42a-4144-87ef-a58d559da783" />
+
 
 The system detects whether each tower experiences performance degradation following the transition.
 
@@ -20,7 +27,8 @@ The monitoring system follows a **multi-level architecture**:
 
 <p align="center">
   <img src="https://github.com/user-attachments/assets/ed032f38-094b-4292-93b8-ba1a4a2e208d" width="480" />
-  <img src="images/concrete-buildings.jpg" width="380" />
+  <img width="300" height="500" alt="image" src="https://github.com/user-attachments/assets/297a68ec-9b29-4135-8ffd-ca6114d57561" />
+
 </p>
 
 
@@ -76,7 +84,8 @@ The pipeline operates in **near real-time**, leveraging **parallel processing** 
 ## 5. Technical Implementation
 
 - **Data Pipeline:** End-to-end system covering **data extraction**, **cleaning**, **transformation**, and **feature computation**.
-    <img src="images/airflow.png" width="800" alt="airflow Diagram">
+<img width="2642" height="1418" alt="image" src="https://github.com/user-attachments/assets/1978d09b-7969-4b2f-b586-833b77eb9faa" />
+
 
 - **Scalability:** Utilizes **Apache Spark** and **parallel processing** for large-scale efficiency.
   
@@ -102,6 +111,7 @@ The pipeline operates in **near real-time**, leveraging **parallel processing** 
 
 - https://github.com/GeneSUN/Class_SNAP/blob/main/class_SNAP.py
 
-    <img src="images/Dashboard.png" width="600" alt="Hierarchy Diagram">
+<img width="2886" height="1842" alt="image" src="https://github.com/user-attachments/assets/ceec821b-8dad-44a2-a9eb-e28e4aaca2b0" />
+
 
 - https://github.com/GeneSUN/Class_SNAP/tree/main
