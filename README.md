@@ -1,8 +1,6 @@
 
 
 # Project Overview: EnodeB Performance Monitoring During Vendor Transition
-The full project documentation is hosted here:  
-👉 [View Detailed Documentation](https://github.com/GeneSUN/Class_SNAP)
 
 
 
